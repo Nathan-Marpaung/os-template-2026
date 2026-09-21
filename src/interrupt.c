@@ -40,4 +40,10 @@ void main_interrupt_handler(struct InterruptFrame frame) {
     }
 }
 
+// For keyboard later, call keyboard_isr() in main_interrupt_handler() when IRQ1 is received 
+// Will implement when interrupt is done
 
+// For keyboard use
+void activate_keyboard_interrupt(void) {
+    out(PIC1_DATA, in(PIC1_DATA) & ~(1 << IRQ_KEYBOARD));
+}

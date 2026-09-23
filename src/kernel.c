@@ -4,7 +4,7 @@
 #include "header/kernel-entrypoint.h"
 #include "header/cpu/interrupt.h"
 #include "header/idt.h"
-#include "framebuffer.h"
+#include "header/text/framebuffer.h"
 
 void kernel_setup(void) {
     load_gdt(&_gdt_gdtr);

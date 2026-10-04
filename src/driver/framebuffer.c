@@ -2,61 +2,77 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "header/text/framebuffer.h"
-#include "header/stdlib/string.h"
-#include "header/cpu/portio.h"
+#include "header/driver/vga.h"
 
 /**
- * framebuffer_write — Write character 'c' with colours to cell (row, col).
+ * FramebufferCell — shadow copy of one text cell.
  *
- * VGA text framebuffer memory layout (base = 0xB8000):
- *   Each cell is 2 bytes at offset (row * 80 + col) * 2:
- *     [+0] ASCII character byte
- *     [+1] colour attribute: (bg << 4) | (fg & 0x0F)
- *
- * Reference: https://wiki.osdev.org/Text_UI
- *
- * Why multiply offset by 2?
- *   The FRAMEBUFFER_MEMORY_OFFSET pointer is uint8_t*, so subscript [n]
- *   advances n bytes. Each cell occupies 2 bytes, hence *2.
+ * VGA planar memory can't be read back as "character + colour", so the console
+ * keeps its own copy to redraw a cell when the cursor leaves it.
  */
+struct FramebufferCell {
+    char    c;
+    uint8_t fg;
+    uint8_t bg;
+};
+
+static struct FramebufferCell cells[FRAMEBUFFER_HEIGHT][FRAMEBUFFER_WIDTH];
+static uint8_t cursor_row = 0;
+static uint8_t cursor_col = 0;
+
+static void draw_cell(uint8_t row, uint8_t col) {
+    struct FramebufferCell *cell = &cells[row][col];
+    bool has_cursor = row == cursor_row && col == cursor_col;
+    vga_draw_glyph(col, (uint16_t) row * VGA_FONT_HEIGHT, cell->c, cell->fg, cell->bg, has_cursor);
+}
+
+void framebuffer_init(void) {
+    vga_init();
+    framebuffer_clear();
+}
+
 void framebuffer_write(uint8_t row, uint8_t col, char c, uint8_t fg, uint8_t bg) {
-    uint16_t offset = (uint16_t)row * FRAMEBUFFER_WIDTH + col;
-    FRAMEBUFFER_MEMORY_OFFSET[2 * offset]     = (uint8_t)c;
-    FRAMEBUFFER_MEMORY_OFFSET[2 * offset + 1] = (uint8_t)((bg << 4) | (fg & 0x0F));
+    if (row >= FRAMEBUFFER_HEIGHT || col >= FRAMEBUFFER_WIDTH)
+        return;
+
+    cells[row][col] = (struct FramebufferCell) {
+        .c  = c,
+        .fg = fg & 0x0F,
+        .bg = bg & 0x0F,
+    };
+    draw_cell(row, col);
 }
 
 /**
- * framebuffer_set_cursor — Reposition the blinking text cursor.
- *
- * The VGA CRT controller uses a two-register indirect scheme:
- *   1. Write the register index to CURSOR_PORT_CMD (0x3D4).
- *   2. Write the data byte   to CURSOR_PORT_DATA (0x3D5).
- *
- * Register 0x0F = Cursor Location Low  (bits 7:0 of linear position)
- * Register 0x0E = Cursor Location High (bits 15:8 of linear position)
- * Linear position = row * 80 + col
- *
- * Reference: https://wiki.osdev.org/Text_Mode_Cursor
+ * framebuffer_set_cursor — Redraw the old cell without the underline, then
+ * redraw the new cell with it. There is no hardware cursor in graphics mode.
  */
 void framebuffer_set_cursor(uint8_t r, uint8_t c) {
-    uint16_t pos = (uint16_t)r * FRAMEBUFFER_WIDTH + c;
-    out(CURSOR_PORT_CMD,  0x0F);
-    out(CURSOR_PORT_DATA, (uint8_t)(pos & 0xFF));
-    out(CURSOR_PORT_CMD,  0x0E);
-    out(CURSOR_PORT_DATA, (uint8_t)((pos >> 8) & 0xFF));
+    if (r >= FRAMEBUFFER_HEIGHT || c >= FRAMEBUFFER_WIDTH)
+        return;
+
+    uint8_t old_row = cursor_row;
+    uint8_t old_col = cursor_col;
+    cursor_row = r;
+    cursor_col = c;
+    draw_cell(old_row, old_col);
+    draw_cell(r, c);
 }
 
 /**
- * framebuffer_clear — Blank all 80×25 cells.
- *
- * Writes 0x00 (null character) and 0x07 (light-grey on black) to every cell.
- * A single memset can't be used because the character byte and the colour
- * byte need different values, so each cell is written via framebuffer_write().
+ * framebuffer_clear — Reset the shadow cells, wipe VRAM in one pass, and
+ * redraw only the cursor cell (every other blank cell is already plain black).
  */
 void framebuffer_clear(void) {
     for (uint8_t row = 0; row < FRAMEBUFFER_HEIGHT; row++) {
         for (uint8_t col = 0; col < FRAMEBUFFER_WIDTH; col++) {
-            framebuffer_write(row, col, '\0', 0x7, 0x0);
+            cells[row][col] = (struct FramebufferCell) {
+                .c  = '\0',
+                .fg = 0x7,
+                .bg = 0x0,
+            };
         }
     }
+    vga_clear(0x0);
+    draw_cell(cursor_row, cursor_col);
 }

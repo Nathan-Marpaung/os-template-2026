@@ -4,27 +4,29 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include "header/driver/vga.h"
 
-/* VGA text-mode framebuffer starts at physical address 0xB8000 */
-#define FRAMEBUFFER_MEMORY_OFFSET ((uint8_t *) 0xB8000)
-
-/* Text-mode resolution */
-#define FRAMEBUFFER_WIDTH  80
-#define FRAMEBUFFER_HEIGHT 25
-
-/* CRT controller I/O ports for cursor control (OSDev: Text Mode Cursor) */
-#define CURSOR_PORT_CMD  0x03D4
-#define CURSOR_PORT_DATA 0x03D5
+/* Text grid on top of VGA mode 12h: 640x480 / 8x16 glyph = 80x30 cells */
+#define FRAMEBUFFER_WIDTH  (VGA_WIDTH / VGA_FONT_WIDTH)
+#define FRAMEBUFFER_HEIGHT (VGA_HEIGHT / VGA_FONT_HEIGHT)
 
 /**
- * Terminal text framebuffer — 80×25 VGA text mode.
+ * Terminal text framebuffer — 80x30 character cells rendered in graphics mode.
  *
- * Each character cell occupies 2 consecutive bytes in FRAMEBUFFER_MEMORY_OFFSET:
- *   byte[2*i]   — ASCII character code
- *   byte[2*i+1] — colour byte: bits[7:4] = background colour, bits[3:0] = foreground colour
+ * The interface is the same as the old 80x25 text-mode driver, but every cell
+ * is now drawn pixel by pixel into VGA mode 12h (see driver/vga.h). A shadow
+ * copy of each cell's character and colours is kept so the cell under the
+ * software cursor can be redrawn when the cursor moves.
  *
  * Colour indices: https://en.wikipedia.org/wiki/BIOS_color_attributes
  */
+
+/**
+ * framebuffer_init — Switch the display to graphics mode and clear it.
+ *
+ * Must be called once before any other framebuffer_* function.
+ */
+void framebuffer_init(void);
 
 /**
  * framebuffer_write — Write a single character with colours to a cell.
@@ -38,7 +40,9 @@
 void framebuffer_write(uint8_t row, uint8_t col, char c, uint8_t fg, uint8_t bg);
 
 /**
- * framebuffer_set_cursor — Move the hardware text cursor via CRT controller port I/O.
+ * framebuffer_set_cursor — Move the text cursor (an underline in the cell's fg colour).
+ *
+ * Out-of-range positions are ignored.
  *
  * @param r  Target row, 0-based
  * @param c  Target column, 0-based

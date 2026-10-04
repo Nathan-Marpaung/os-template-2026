@@ -1,0 +1,8 @@
+# Force LF line endings for all text files (cross-platform safe)
+* text=auto eol=lf
+
+# Binary files — never touch line endings
+*.iso    binary
+*.img    binary
+*.bin    binary
+*.o      binary

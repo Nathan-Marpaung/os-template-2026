@@ -1,3 +1,20 @@
+# Tool-generated (not for git)
 .kit/
 .vscode/
+
+# Build artefacts — never commit (AGENTS.md rule)
 *.o
+*.d
+bin/
+*.iso
+*.img
+*.bin
+
+# QEMU debug log
+qemu.log
+
+# Per-machine toolchain overrides (see SETUP.md)
+local.mk
+
+# macOS metadata
+.DS_Store

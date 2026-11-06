@@ -2,6 +2,10 @@ global loader       ; the entry symbol for ELF
 global load_gdt     ; load GDT table
 global set_tss_register
 global kernel_execute_user_program
+global kernel_stack_top
+global kernel_saved_esp
+global kernel_return_from_user
+
 extern kernel_setup
 extern _paging_kernel_page_directory
 extern _paging_kernel_page_table
@@ -15,10 +19,14 @@ CHECKSUM          equ -MAGIC_NUMBER  ; calculate the checksum
 KERNEL_VIRTUAL_BASE equ 0xC0000000
 
 section .bss
-align 4                              ; align at 4 bytes
-kernel_stack:                        ; label points to beginning of memory
-    resb KERNEL_STACK_SIZE           ; reserve stack for the kernel
+align 4
+kernel_stack:
+    resb KERNEL_STACK_SIZE
+kernel_stack_top:
 
+align 4
+kernel_saved_esp:
+    resd 1
 section .multiboot                   ; GNU GRUB Multiboot header
 align 4                              ; the code must be 4 byte aligned
     dd MAGIC_NUMBER                  ; write the magic number to the machine code,
@@ -106,24 +114,63 @@ set_tss_register:
     ret
 
 kernel_execute_user_program:
+    ; Simpan EFLAGS kernel
+    pushfd
+
+    ; Simpan register kernel
+    push ebp
+    push ebx
+    push esi
+    push edi
+
+    ; Simpan posisi stack kernel untuk dipulihkan saat SYSCALL_EXIT
+    mov [kernel_saved_esp], esp
+
+    ; Pindahkan data segment ke user data segment (0x23)
     mov eax, 0x20 | 0x3
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
 
-    ; Using iret (return instruction for interrupt) technique for privilege change
-    ; Stack values will be loaded into these register:
-    ; [esp] -> eip, [esp+4] -> cs, [esp+8] -> eflags, [] -> user esp, [] -> user ss
-    mov ecx, [esp+4] ; Save first (before pushing anything to stack) for last push
-    push eax ; Stack segment selector (GDT_USER_DATA_SELECTOR), user privilege
+    ; Siapkan stack frame untuk berpindah ke Ring 3 menggunakan iret
+    mov ecx, [esp + 24] ; Argumen virtual_addr sebelum empat push register
+
+    push eax            ; SS user = 0x23
+
     mov eax, ecx
     add eax, 0x400000 - 4
-    push eax ; User space stack pointer (esp), move it into last 4 MiB
-    pushf    ; eflags register state, when jump inside user program
+    push eax            ; ESP user
+
+    pushfd              ; EFLAGS
+
     mov eax, 0x18 | 0x3
-    push eax ; Code segment selector (GDT_USER_CODE_SELECTOR), user privilege
+    push eax            ; CS user = 0x1B
+
     mov eax, ecx
-    push eax ; eip register to jump back
+    push eax            ; EIP = virtual_addr
 
     iret
+
+kernel_return_from_user:
+    ; Pulihkan segment register kernel
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    ; Pulihkan stack kernel
+    mov esp, [kernel_saved_esp]
+
+    ; Pulihkan register kernel
+    pop edi
+    pop esi
+    pop ebx
+    pop ebp
+
+    ; Pulihkan EFLAGS kernel
+    popfd
+
+    ; Kembali ke kernel_setup()
+    ret

@@ -85,6 +85,12 @@ static void keyboard_buffer_push(char c) {
     }
     keyboard_buffer[keyboard_tail] = c;
     keyboard_tail = next;
+
+    if (c == '\b') {
+        framebuffer_write(1, 70, 'B', 0x0F, 0);
+    } else if (c == '\n') {
+        framebuffer_write(1, 70, 'E', 0x0F, 0);
+    }
 }
 
 static char scancode_to_char(uint8_t scancode) {
@@ -122,6 +128,13 @@ static void keyboard_legacy_echo(char c) {
 void keyboard_handler(void) {
     uint8_t scancode = keyboard_read();
     keyboard_last_scancode = scancode;
+    
+const char hex[] = "0123456789ABCDEF";
+
+    framebuffer_write(0, 70, '0', 0x0F, 0);
+    framebuffer_write(0, 71, 'x', 0x0F, 0);
+    framebuffer_write(0, 72, hex[scancode >> 4], 0x0F, 0);
+    framebuffer_write(0, 73, hex[scancode & 0x0F], 0x0F, 0);
 
     if (scancode == SC_EXTENDED_PREFIX) {
         extended = true;

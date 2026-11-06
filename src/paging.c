@@ -69,6 +69,8 @@ struct PageTable *paging_get_page_table(
         &page_dir->table[page_directory_index];
 
     if (dir_entry->flag.present_bit) {
+        dir_entry->flag.user_access_bit = true;
+
         return (struct PageTable *)(
             RECURSIVE_PAGE_TABLES_VIRTUAL_ADDRESS
             + page_directory_index * PAGE_FRAME_SIZE

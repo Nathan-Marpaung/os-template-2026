@@ -83,7 +83,7 @@ static void syscall_fs(uint32_t service, uint32_t request_addr, uint32_t retcode
     }
 }
 
-void syscall_handler(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx)
+uint32_t syscall_handler(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx)
 {
     switch (eax)
     {
@@ -145,8 +145,13 @@ void syscall_handler(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx)
             terminal_get_cursor((uint8_t *)ebx, (uint8_t *)ecx);
         }
         break;
+    
+    case SYSCALL_EXIT:
+        return 1; 
 
     default:
         break;
     }
+
+    return 0;
 }

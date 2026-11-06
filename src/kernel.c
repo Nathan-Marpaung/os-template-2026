@@ -16,9 +16,9 @@ void kernel_setup(void) {
     paging_init();
 
     pic_remap();
-    pic_unmask_irq(1);
     idt_init();
     isr_init();
+    pic_unmask_irq(1);
 
     framebuffer_clear();
     framebuffer_write(0, 0, 'A', 0x0F, 0x00);
@@ -29,10 +29,11 @@ void kernel_setup(void) {
     gdt_install_tss();
     set_tss_register();
 
-    
     if (!paging_allocate_user_region(&_paging_kernel_page_directory, (void *) 0, 1024)) {
-        while (true);   
+        framebuffer_write(1, 0, 'P', 0x0C, 0x00);
+        while (true);
     }
+    framebuffer_write(1, 0, '1', 0x0F, 0x00);
 
     // Load shell dari root disk ke address 0
     struct EXT2DriverRequest request = {
@@ -42,9 +43,12 @@ void kernel_setup(void) {
         .parent_inode = 1,          
         .buffer_size  = 0x100000,
     };
+    
     if (read(request) != 0) {
-        while (true);   
+        framebuffer_write(1, 0, 'R', 0x0C, 0x00);
+        while (true);
     }
+    framebuffer_write(1, 0, '2', 0x0F, 0x00);
 
     __asm__ volatile ("sti");
 

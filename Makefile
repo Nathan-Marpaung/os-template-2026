@@ -29,8 +29,6 @@ run: all
 		-drive file=$(DISK_IMAGE),format=raw
 all: build
 build: iso
-clean:
-	rm -rf $(OUTPUT_FOLDER)/*.o $(OUTPUT_FOLDER)/*.iso $(OUTPUT_FOLDER)/kernel $(OUTPUT_FOLDER)/shell $(OUTPUT_FOLDER)/shell_elf
 
 kernel:
 	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/kernel-entrypoint.s -o $(OUTPUT_FOLDER)/kernel-entrypoint.o
@@ -91,15 +89,18 @@ user-shell:
 	@rm -f *.o
 
 inserter:
-	@$(CC) -g -I$(SOURCE_FOLDER) \
+	@xcrun --sdk macosx clang \
+		-isysroot $(shell xcrun --sdk macosx --show-sdk-path) \
+		-g -Wall -Wextra -I$(SOURCE_FOLDER) \
 		$(SOURCE_FOLDER)/stdlib/string.c \
 		$(SOURCE_FOLDER)/ext2.c \
 		$(SOURCE_FOLDER)/external/external-inserter.c \
 		-o $(OUTPUT_FOLDER)/inserter
 
-insert-shell: inserter user-shell
-	@echo Inserting shell into root directory...
-	@cd $(OUTPUT_FOLDER); ./inserter shell 1 storage.bin
+# Insert Hello World into EXT2 filesystem
+insert-hello: inserter user-hello
+	@echo Inserting Hello World into root directory...
+	@cd $(OUTPUT_FOLDER); ./inserter hello 1 storage.bin
 
 # Hello World: external user application
 user-hello:

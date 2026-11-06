@@ -39,6 +39,7 @@
 #define SYSCALL_SET_CURSOR          9
 #define SYSCALL_GET_CURSOR          10
 #define SYSCALL_FS_FILE_SIZE        11
+#define SYSCALL_EXIT                12
 
 /**
  * Handler kernel untuk interrupt 0x30. Dipanggil dari isr_syscall_handler (cpu/isr.s)

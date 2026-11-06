@@ -100,4 +100,16 @@ inserter:
 insert-shell: inserter user-shell
 	@echo Inserting shell into root directory...
 	@cd $(OUTPUT_FOLDER); ./inserter shell 1 storage.bin
-	
+
+# Hello World: external user application
+user-hello:
+	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
+	@$(CC) $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/external/hello-world.c -o hello-world.o
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 --oformat=binary \
+		crt0.o hello-world.o -o $(OUTPUT_FOLDER)/hello
+	@echo Linking Hello World and generating flat binary...
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 \
+		crt0.o hello-world.o -o $(OUTPUT_FOLDER)/hello_elf
+	@echo Generating ELF32 for debugging...
+	@wc -c $(OUTPUT_FOLDER)/hello
+	@rm -f *.o

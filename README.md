@@ -14,48 +14,70 @@ Repository ini dibuat untuk memenuhi tugas besar mata kuliah IF2130 Sistem Opera
 
 ## Struktur Direktori 
 ```
-└── src/
-    ├── cpu/
-    │   ├── gdt.c
-    │   ├── idt.c
-    │   ├── isr.c
-    │   ├── isr.s
-    │   ├── keyboard.c
-    │   ├── pic.c
-    │   └── portio.c        
-    │
-    ├── header/
-    │   ├── cpu/
-    │   │   ├── gdt.h
-    │   │   ├── idt.h
-    │   │   ├── isr.h
-    │   │   ├── keyboard.h
-    │   │   ├── pic.h
-    │   │   └── portio.h
-    │   ├── filesystem/
-    │   │   └── ext2.h
-    │   ├── stdlib/
-    │   │   └── string.h
-    │   ├── text/
-    │   │   └── framebuffer.h
-    │   ├── disk.h
-    │   └── kernel-entrypoint.h
-    │
-    ├── stdlib/
-    │   └── string.c
-    │
-    ├── disk.c
-    ├── ext2.c
-    ├── framebuffer.c
-    ├── kernel.c
-    ├── kernel-entrypoint.s
-    ├── linker.ld
-    └── menu.lst
+src/
+├── cpu/
+│   ├── gdt.c
+│   ├── idt.c
+│   ├── isr.c
+│   ├── isr.s
+│   ├── keyboard.c
+│   ├── pic.c
+│   └── portio.c
+├── external/
+│   ├── external-inserter.c
+│   └── hello-world.c
+├── header/
+│   ├── cpu/
+│   ├── filesystem/
+│   ├── memory/
+│   ├── stdlib/
+│   ├── syscall/
+│   ├── text/
+│   └── user/
+├── stdlib/
+├── text/
+├── crt0.s
+├── disk.c
+├── ext2.c
+├── fsutil.c
+├── kernel-entrypoint.s
+├── kernel.c
+├── linker.ld
+├── paging.c
+├── swap.c
+├── user-linker.ld
+└── user-shell.c
 ```
   
-## Cara Run Virtual Machine QEMU:
-  1. make clean
-  2. make build
-  3. make run
-  4. qemu-system-i386 -cdrom bin/uvuwevwe_OSas.iso
+## Cara Menjalankan Virtual Machine QEMU
+
+### Prasyarat
+
+Pastikan perangkat telah menginstal:
+- Git
+- Make
+- NASM
+- Clang/LLVM
+- LLD
+- QEMU
+- `mkisofs`
+
+### Setup Pertama Kali
+
+1. Clone repository:
+
+   ```bash
+   git clone <URL_REPOSITORY>
+   cd uvuwevwe_OSas
      
+## Cara Setup Pertama Kali : 
+  1. make clean (bersihkan build sebelumnya)
+  2. make build (build kernel dan ISO)
+  3. make disk (buat disk image)
+  4. make insert-shell (masukkan Shell ke filesystem)
+  5. make insert-hello (masukkan program Hello World)
+  6. make run (jalankan OS)
+  7. qemu-system-i386 -cdrom bin/uvuwevwe_OSas.iso
+     
+## Cara Run Virtual Machine QEMU:
+  1. make run

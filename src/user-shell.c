@@ -1338,6 +1338,62 @@ static void cmd_grep(struct CmdCtx *ctx)
     }
 }
 
+/* ============================== exec / ps / kill (STUB) ============================== */
+
+/*
+ * STUB:
+ * Menjalankan program eksternal akan dihubungkan ke process manager
+ * setelah API process creation dari Bagian B tersedia.
+ */
+static void cmd_exec(struct CmdCtx *ctx)
+{
+    if (ctx->argc != 2)
+    {
+        print_error("exec", NULL, "Penggunaan: exec <nama program>");
+        return;
+    }
+
+    ob_puts(ctx->out, "[STUB] exec: process creation belum tersedia.\n");
+    ob_puts(ctx->out, "Program yang diminta: ");
+    ob_puts(ctx->out, ctx->argv[1]);
+    ob_putc(ctx->out, '\n');
+}
+
+/*
+ * STUB:
+ * Menampilkan daftar process akan dihubungkan ke syscall process info
+ * dari Bagian B.
+ */
+static void cmd_ps(struct CmdCtx *ctx)
+{
+    if (ctx->argc != 1)
+    {
+        print_error("ps", NULL, "Penggunaan: ps");
+        return;
+    }
+
+    ob_puts(ctx->out, "[STUB] ps: process listing belum tersedia.\n");
+}
+
+/*
+ * STUB:
+ * Menghentikan process akan dihubungkan ke syscall process termination
+ * dari Bagian B.
+ */
+static void cmd_kill(struct CmdCtx *ctx)
+{
+    if (ctx->argc != 2)
+    {
+        print_error("kill", NULL, "Penggunaan: kill <pid>");
+        return;
+    }
+
+    ob_puts(ctx->out, "[STUB] kill: process termination belum tersedia.\n");
+    ob_puts(ctx->out, "PID yang diminta: ");
+    ob_puts(ctx->out, ctx->argv[1]);
+    ob_putc(ctx->out, '\n');
+}
+
 /* ============================== clear / help ============================== */
 
 static void cmd_clear(struct CmdCtx *ctx)
@@ -1365,6 +1421,9 @@ static const struct Command commands[] = {
     {"mv", cmd_mv, "mv <src> <dst>       pindah / ganti nama file atau folder"},
     {"find", cmd_find, "find <nama>          cari file/folder di seluruh file system"},
     {"grep", cmd_grep, "grep <pola> [file]   cari baris yang cocok (regex: ^ $ . *)"},
+    {"exec", cmd_exec, "exec <nama>           jalankan program eksternal"},
+    {"ps", cmd_ps, "ps                    tampilkan daftar process"},
+    {"kill", cmd_kill, "kill <pid>            hentikan process"},
     {"echo", cmd_echo, "echo <teks>          tulis teks (echo isi > file untuk membuat file)"},
     {"pwd", cmd_pwd, "pwd                  tampilkan folder sekarang"},
     {"clear", cmd_clear, "clear                bersihkan layar"},

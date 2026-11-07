@@ -94,7 +94,9 @@ int main(int argc, char *argv[]) {
     request.name = name;
     request.name_len = filename_length;
     request.is_directory = false;
-    sscanf(parent_str, "%u", &request.parent_inode);
+    uint32_t parent_inode;
+    sscanf(parent_str, "%u", &parent_inode);
+    request.parent_inode = parent_inode;
     sscanf(target_path, "%s", request.name);
 
     reqread = request;

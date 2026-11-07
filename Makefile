@@ -1,3 +1,4 @@
+.PHONY: run all build kernel iso disk clean user-shell inserter insert-hello user-hello insert-shell
 # Compiler & linker
 LLVM_PREFIX   = $(shell brew --prefix llvm)
 LLD_PREFIX    = $(shell brew --prefix lld)
@@ -36,7 +37,7 @@ kernel:
 # TODO: Compile C file with CFLAGS
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/kernel.c -o $(OUTPUT_FOLDER)/kernel.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/paging.c -o $(OUTPUT_FOLDER)/paging.o
-		@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/swap.c -o $(OUTPUT_FOLDER)/swap.o
+	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/swap.c -o $(OUTPUT_FOLDER)/swap.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/cpu/gdt.c -o $(OUTPUT_FOLDER)/gdt.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/cpu/pic.c -o $(OUTPUT_FOLDER)/pic.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/cpu/idt.c -o $(OUTPUT_FOLDER)/idt.o
@@ -74,6 +75,14 @@ iso: kernel
 disk:
 	@qemu-img create -f raw $(DISK_IMAGE) $(DISK_SIZE)
 
+# Clean build artifacts without deleting storage.bin
+clean:
+	@rm -f $(OUTPUT_FOLDER)/kernel
+	@rm -f $(OUTPUT_FOLDER)/$(ISO_NAME).iso
+	@rm -f $(OUTPUT_FOLDER)/*.o
+	@rm -f crt0.o user-shell.o string.o hello-world.o
+	@rm -rf $(OUTPUT_FOLDER)/iso
+
 # Shell (Book 3.3.3 + 3.4.2.1): flat binary untuk dimasukkan ke storage, ELF32 untuk debugging symbol
 user-shell:
 	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
@@ -99,8 +108,8 @@ inserter:
 
 # Insert Hello World into EXT2 filesystem
 insert-hello: inserter user-hello
-	@echo Inserting Hello World into root directory...
-	@cd $(OUTPUT_FOLDER); ./inserter hello 1 storage.bin
+	@echo Inserting Hello World into EXT2 filesystem...
+	@cd $(OUTPUT_FOLDER); ./inserter -f hello 1 storage.bin
 
 # Hello World: external user application
 user-hello:
@@ -114,3 +123,8 @@ user-hello:
 	@echo Generating ELF32 for debugging...
 	@wc -c $(OUTPUT_FOLDER)/hello
 	@rm -f *.o
+
+# Insert Shell into EXT2 filesystem
+insert-shell: inserter user-shell
+	@echo Inserting Shell into EXT2 filesystem...
+	@cd $(OUTPUT_FOLDER); ./inserter -f shell 1 storage.bin

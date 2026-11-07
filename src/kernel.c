@@ -35,25 +35,32 @@ void kernel_setup(void) {
     }
     framebuffer_write(1, 0, '1', 0x0F, 0x00);
 
-    // Load shell dari root disk ke address 0
+    // Load Shell dari root disk ke address 0
     struct EXT2DriverRequest request = {
-        .buf          = (uint8_t *) 0,
-        .name         = "shell",
-        .name_len     = 5,
-        .parent_inode = 1,          
-        .buffer_size  = 0x100000,
+        .buf = (uint8_t *) 0,
+        .name = "shell",
+        .name_len = 5,
+        .parent_inode = 1,
+        .buffer_size = 0x100000,
     };
-    
+
     if (read(request) != 0) {
         framebuffer_write(1, 0, 'R', 0x0C, 0x00);
         while (true);
     }
+
     framebuffer_write(1, 0, '2', 0x0F, 0x00);
+
+    // Siapkan kernel stack untuk interrupt dari Ring 3
+    set_tss_kernel_current_stack();
 
     __asm__ volatile ("sti");
 
-    set_tss_kernel_current_stack();
+    // Jalankan Hello World di Ring 3
     kernel_execute_user_program((uint8_t *) 0);
+
+    // Penanda: kernel berhasil menerima kembali kontrol setelah EXIT
+    framebuffer_write(2, 0, 'E', 0x0A, 0x00);
 
     while (true);
 }

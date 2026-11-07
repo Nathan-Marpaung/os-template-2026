@@ -5,6 +5,7 @@ global kernel_execute_user_program
 global kernel_stack_top
 global kernel_saved_esp
 global kernel_return_from_user
+global ring3_interrupt_stack_top
 
 extern kernel_setup
 extern _paging_kernel_page_directory
@@ -27,6 +28,13 @@ kernel_stack_top:
 align 4
 kernel_saved_esp:
     resd 1
+
+alignb 16
+ring3_interrupt_stack:
+    resb 16384
+ring3_interrupt_stack_top:
+
+
 section .multiboot                   ; GNU GRUB Multiboot header
 align 4                              ; the code must be 4 byte aligned
     dd MAGIC_NUMBER                  ; write the magic number to the machine code,

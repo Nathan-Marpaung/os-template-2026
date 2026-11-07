@@ -43,15 +43,15 @@ struct GlobalDescriptorTable global_descriptor_table = {
 
         // Entry 5: TSS
         {
-            .segment_high = (sizeof(struct TSSEntry) & (0xF << 16)) >> 16,
-            .segment_low  = sizeof(struct TSSEntry),
+            .segment_high = ((sizeof(struct TSSEntry) - 1) >> 16) & 0xF,
+            .segment_low  = sizeof(struct TSSEntry) - 1,
             .base_high = 0, 
             .base_mid = 0, 
             .base_low = 0,
             .non_system = 0, 
             .type_bit = 0x9, 
             .dpl = 0, .p_bit = 1,
-            .db_bit = 1, .l_bit = 0, .g_bit = 0
+            .db_bit = 0, .l_bit = 0, .g_bit = 0
         },
         {0}
         

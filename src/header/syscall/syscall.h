@@ -12,6 +12,12 @@
 #define SYS_GETKEY         5
 #define SYS_CLEAR_SCREEN   6
 
+#define SYS_EXEC         7
+#define SYS_EXIT         8
+#define SYS_PS           9
+#define SYS_KILL         10
+#define SYS_GET_TIME     11
+
 static inline int32_t system_call(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx) {
     int32_t ret;
     __asm__ volatile (
@@ -33,6 +39,23 @@ static inline char sys_getkey(void) {
 
 static inline void sys_clear_screen(void) {
     system_call(SYS_CLEAR_SCREEN, 0, 0, 0);
+}
+
+
+static inline int32_t sys_exec(struct EXT2DriverRequest *request) {
+    return system_call(SYS_EXEC, (uint32_t) request, 0, 0);
+}
+
+static inline void sys_exit(void) {
+    system_call(SYS_EXIT, 0, 0, 0);
+}
+
+static inline int32_t sys_ps(char *buffer, uint32_t max_size) {
+    return system_call(SYS_PS, (uint32_t) buffer, (uint32_t) max_size, 0);
+}
+
+static inline int32_t sys_kill(int32_t pid) {
+    return system_call(SYS_KILL, (uint32_t) pid, 0, 0);
 }
 
 #endif

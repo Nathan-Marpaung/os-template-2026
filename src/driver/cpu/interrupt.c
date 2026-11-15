@@ -6,6 +6,7 @@
 #include "header/memory/swap.h"
 #include "header/filesystem/ext2.h"
 #include "header/syscall/syscall.h"
+#include "header/process/process.h"
 
 struct TSSEntry _interrupt_tss_entry = {
     .ss0 = GDT_KERNEL_DATA_SEGMENT_SELECTOR,
@@ -166,6 +167,51 @@ void syscall(struct InterruptFrame frame) {
         }
         default:
             frame.cpu.general.eax = (uint32_t)-1;
+            break;
+    }
+}
+
+void handle_syscall(struct InterruptFrame *frame) {
+    uint32_t syscall_number = frame->cpu.general.eax;
+
+    switch (syscall_number) {
+        case SYS_READ:
+            break;
+        case SYS_WRITE:
+            break;
+        case SYS_PUTCHAR:
+            break;
+        case SYS_EXEC: {
+            struct EXT2DriverRequest *request = (struct EXT2DriverRequest*) frame->cpu.general.ebx;
+            frame->cpu.general.eax = process_create_user_process(*request);
+            break;
+        }
+        case SYS_EXIT: {
+            int current_pid = process_get_current_running_pid();
+            if (current_pid >= 0) {
+                _process_list[current_pid].metadata.state = PROCESS_STATE_TERMINATED;
+                scheduler_switch_to_next_process();
+            }
+            break;
+        }
+        case SYS_PS: {
+            char *buffer = (char*) frame->cpu.general.ebx;
+            uint32_t max_size = (uint32_t) frame->cpu.general.ecx;
+            process_get_list(buffer, max_size);
+            frame->cpu.general.eax = 0;
+            break;
+        }
+        case SYS_KILL: {
+            int32_t target_pid = (int32_t) frame->cpu.general.ebx;
+            if (target_pid >= 0 && target_pid < PROCESS_COUNT_MAX) {
+                _process_list[target_pid].metadata.state = PROCESS_STATE_TERMINATED;
+                frame->cpu.general.eax = 0;
+            } else {
+                frame->cpu.general.eax = -1;
+            }
+            break;
+        }
+        default:
             break;
     }
 }

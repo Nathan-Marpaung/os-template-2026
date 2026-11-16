@@ -4,9 +4,11 @@
 #include "header/driver/keyboard.h"
 #include "header/cpu/gdt.h"
 #include "header/memory/swap.h"
+#include "header/memory/paging.h"
 #include "header/filesystem/ext2.h"
 #include "header/syscall/syscall.h"
 #include "header/process/process.h"
+#include "header/scheduler/scheduler.h"
 
 struct TSSEntry _interrupt_tss_entry = {
     .ss0 = GDT_KERNEL_DATA_SEGMENT_SELECTOR,
@@ -23,6 +25,17 @@ void activate_keyboard_interrupt(void) {
     mask &= ~(1 << IRQ_KEYBOARD);
     out(PIC1_DATA, mask);
     keyboard_state_activate();
+}
+
+void pit_initialize(void) {
+    uint16_t divisor = (uint16_t)(PIT_BASE_FREQUENCY / PIT_FREQUENCY);
+    out(PIT_COMMAND, 0x36);
+    out(PIT_CHANNEL_0, (uint8_t)(divisor & 0xFF));
+    out(PIT_CHANNEL_0, (uint8_t)(divisor >> 8));
+
+    uint8_t mask = in(PIC1_DATA);
+    mask &= (uint8_t)~(1u << IRQ_TIMER);
+    out(PIC1_DATA, mask);
 }
 
 void io_wait(void) {
@@ -216,17 +229,41 @@ void handle_syscall(struct InterruptFrame *frame) {
     }
 }
 
-void main_interrupt_handler(struct InterruptFrame frame) {
-    switch (frame.int_number) {
+static void handle_timer_interrupt(struct InterruptFrame *frame) {
+    pic_ack(IRQ_TIMER);
+
+    if ((frame->int_stack.cs & 0x3u) != 0x3u ||
+        !scheduler_has_running_process()) {
+        return;
+    }
+
+    struct Context context;
+    context.cpu = frame->cpu;
+    context.cpu.stack.esp =
+        *((uint32_t *)((uint8_t *)frame + sizeof(*frame)));
+    context.eip = frame->int_stack.eip;
+    context.eflags = frame->int_stack.eflags;
+    context.page_directory_virtual_addr =
+        paging_get_current_page_directory_addr();
+
+    scheduler_save_context_to_current_running_pcb(context);
+    scheduler_switch_to_next_process();
+}
+
+void main_interrupt_handler(struct InterruptFrame *frame) {
+    switch (frame->int_number) {
         case PAGE_FAULT:
-            page_fault_handler(frame);
+            page_fault_handler(*frame);
+            break;
+        case PIC1_OFFSET + IRQ_TIMER:
+            handle_timer_interrupt(frame);
             break;
         case PIC1_OFFSET + IRQ_KEYBOARD:
             keyboard_isr();
             pic_ack(IRQ_KEYBOARD);
             break;
         case 0x30:
-            syscall(frame);
+            syscall(*frame);
             break;
         default:
             break;

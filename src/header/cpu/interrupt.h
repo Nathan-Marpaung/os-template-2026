@@ -22,6 +22,12 @@
 #define PIC2_COMMAND         PIC2
 #define PIC2_DATA            (PIC2 + 1)
 
+// Programmable Interval Timer ports and frequency
+#define PIT_CHANNEL_0        0x40
+#define PIT_COMMAND          0x43
+#define PIT_BASE_FREQUENCY   1193182u
+#define PIT_FREQUENCY        1000u
+
 // PIC ACK & mask constant
 #define PIC_ACK              0x20
 #define PIC_DISABLE_ALL_MASK 0xFF
@@ -77,8 +83,8 @@ struct CPURegister {
         uint32_t esi;
     } __attribute__((packed)) index;
     struct {
-        uint32_t esp;
         uint32_t ebp;
+        uint32_t esp;
     } __attribute__((packed)) stack;
     struct {
         uint32_t ebx;
@@ -142,6 +148,9 @@ void set_tss_kernel_current_stack(void);
 // Activate PIC mask for keyboard only
 void activate_keyboard_interrupt(void);
 
+// Configure PIT channel 0 for periodic IRQ0s and unmask IRQ0.
+void pit_initialize(void);
+
 // I/O port wait, around 1-4 microsecond, for I/O synchronization purpose
 void io_wait(void);
 
@@ -158,12 +167,10 @@ void pic_remap(void);
  * This function will be called first if any INT 0x00 - 0x40 is raised, 
  * and will call proper ISR for respective interrupt / exception.
  * 
- * If inter-privilege interrupt raised, SS and ESP is automatically out of main_interrupt_handler()
- * parameter. Can be checked with ((int*) info) + 4 for user $esp, 5 for user $ss
+ * @param frame Pointer to the CPU interrupt frame on the current stack.
  * 
  * Again, this function is not for normal function call, all parameter will be automatically set when interrupt is called.
- * @param frame Information about CPU during interrupt is raised
  */
-void main_interrupt_handler(struct InterruptFrame frame);
+void main_interrupt_handler(struct InterruptFrame *frame);
 
 #endif

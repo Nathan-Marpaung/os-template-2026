@@ -73,6 +73,8 @@ jalankan `make disk`.
 ## Fitur
 
 - Inisialisasi kernel 32-bit dengan GDT, IDT, dan remapping PIC.
+- PIT channel 0 pada 1 kHz untuk IRQ0 serta jalur penyimpanan konteks dan
+  context switch preemptive saat proses Ring 3 aktif.
 - Driver keyboard berbasis interrupt untuk input karakter.
 - GDT user code/data descriptor, TSS, dan transisi kernel ke Ring 3.
 - Flat binary user program serta host-side inserter untuk EXT2.

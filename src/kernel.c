@@ -10,6 +10,7 @@
 #include "header/text/framebuffer.h"
 #include "header/memory/paging.h"
 #include "header/memory/swap.h"
+#include "header/scheduler/scheduler.h"
 #include "header/kernel-entrypoint.h"
 
 static void framebuffer_write_text(
@@ -162,6 +163,7 @@ void kernel_setup(void) {
     pic_remap();
     initialize_idt();
     activate_keyboard_interrupt();
+    scheduler_init();
 
     framebuffer_clear();
     framebuffer_set_cursor(0, 0);
@@ -169,6 +171,7 @@ void kernel_setup(void) {
     initialize_filesystem_ext2();
     gdt_install_tss();
     set_tss_register();
+    pit_initialize();
 
     for (uint32_t address = 0;
          address < 0x100000;

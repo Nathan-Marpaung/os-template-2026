@@ -32,8 +32,11 @@ call_generic_handler:
     mov gs, ax
     pop eax
 
-    ; Call the C function
+    ; Pass the interrupt-frame pointer to the C function
+    mov eax, esp
+    push eax
     call main_interrupt_handler
+    add esp, 4
 
     ; Restore general-purpose & index register
     popad
@@ -52,7 +55,6 @@ call_generic_handler:
     ; [esp], [esp+4], [esp+8]
     ;   eip,   cs,    eflags
     ; Improper value will cause invalid return address & register
-    sti
     iret
 
 

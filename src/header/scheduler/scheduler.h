@@ -21,6 +21,18 @@ __attribute__((noreturn)) extern void process_context_switch(struct Context ctx)
 void scheduler_init(void); 
 
 /**
+ * Get the PID currently selected by the scheduler.
+ *
+ * @return The current PID, or -1 if no process is selected.
+ */
+int scheduler_get_current_running_pid(void);
+
+/**
+ * Check whether the scheduler has a currently running process.
+ */
+bool scheduler_has_running_process(void);
+
+/**
  * Save context to current running process
  * 
  * @param ctx Context to save to current running process control block

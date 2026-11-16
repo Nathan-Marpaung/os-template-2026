@@ -9,6 +9,7 @@
 #include "header/driver/disk.h"
 #include "header/filesystem/ext2.h"
 #include "header/memory/paging.h"
+#include "header/process/process.h"
 
 void kernel_setup(void) {
     // 1. Basic Kernel Initializations
@@ -30,14 +31,6 @@ void kernel_setup(void) {
         ((uint32_t) &_paging_kernel_page_directory - KERNEL_VIRTUAL_ADDRESS_BASE) >> 12,
 };
 
-    // 3. Allocate Virtual Memory for User Program (Multi-page loop)
-    for (uint32_t addr = 0; addr < 0x100000; addr += 0x1000) {
-        paging_allocate_user_page_frame(&_paging_kernel_page_directory, (uint8_t*) addr);
-    }
-
-    for (uint32_t addr = 0x3F0000; addr < 0x400000; addr += 0x1000)
-    paging_allocate_user_page_frame(&_paging_kernel_page_directory, (uint8_t*) addr);
-
     // 4. Load "shell" Binary from Root Directory (Inode 1) into Virtual Address 0x0
     struct EXT2DriverRequest request = {
         .buf = (uint8_t*) 0,
@@ -46,16 +39,17 @@ void kernel_setup(void) {
         .buffer_size = 0x100000,
         .name_len = 5,
     };
-    int8_t r = read(request);
-    if (r != 0) {
-        framebuffer_write(0, 0, 'E', 0xC, 0);              // E = shell load failed
-        framebuffer_write(0, 1, '0' + (r & 0xF), 0xC, 0);  // error code digit
-        while (true);
-    }
+    
     // 5. Prepare TSS Kernel Stack and Jump to Ring 3
     set_tss_kernel_current_stack();
-
-    kernel_execute_user_program((uint8_t*) 0);
+    int32_t pr = process_create_user_process(request);   // .buf=0, .name="shell", .parent_inode=1, .buffer_size=0x100000, .name_len=5
+    if (pr != PROCESS_CREATE_SUCCESS) {
+        framebuffer_write(0, 0, 'P', 0xC, 0);
+        framebuffer_write(0, 1, '0' + pr, 0xC, 0);       // 1=max procs, 2=bad entry, 3=memory, 4=fs read
+        while (true);
+    }
+    paging_use_page_directory(_process_list[0].context.page_directory_virtual_addr);
+    kernel_execute_user_program((void*) 0x0);
 
     while (true);
 }

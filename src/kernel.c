@@ -10,6 +10,7 @@
 #include "header/text/framebuffer.h"
 #include "header/memory/paging.h"
 #include "header/memory/swap.h"
+#include "header/process/process.h"
 #include "header/scheduler/scheduler.h"
 #include "header/kernel-entrypoint.h"
 
@@ -216,12 +217,13 @@ void kernel_setup(void) {
         .name = "shell",
         .name_len = 5,
         .parent_inode = 1,
-        .buffer_size = 0x100000,
+        .buffer_size = 4 * PAGE_FRAME_SIZE,
         .is_directory = false,
     };
-    if (read(shell_request) == 0) {
-        set_tss_kernel_current_stack();
-        kernel_execute_user_program((void *)0);
+    set_tss_kernel_current_stack();
+    if (process_create_user_process(shell_request) == PROCESS_CREATE_SUCCESS) {
+        scheduler_init();
+        scheduler_switch_to_next_process();
     }
 
     uint16_t cursor = 3 * FRAMEBUFFER_WIDTH;

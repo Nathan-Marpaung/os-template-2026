@@ -29,7 +29,8 @@ loader:                                        ; the loader label (defined as en
     mov  esp, kernel_stack - 0xC0000000 + KERNEL_STACK_SIZE
     call activate_paging
     mov  esp, kernel_stack + KERNEL_STACK_SIZE
-    call kernel_setup
+    mov  eax, kernel_setup
+    call eax
 .loop:
     jmp .loop                                  ; loop forever
 
@@ -121,11 +122,13 @@ kernel_execute_user_program:
     mov fs, ax
     mov gs, ax
 
-    push eax
-    lea eax, [ecx + 0x400000 - 4]
-    push eax
+    mov ebp, 0x003FFFFC
+    push dword 0x23
+    push dword 0x003FFFFC
     pushf
-    mov eax, 0x1B
+    pop eax
+    or eax, 0x202
     push eax
+    push dword 0x1B
     push ecx
     iretd

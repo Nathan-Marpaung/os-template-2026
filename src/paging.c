@@ -4,10 +4,7 @@
 #include "header/memory/paging.h"
 #include "header/memory/swap.h"
 #include "header/stdlib/string.h"
-
-/* =================================================================================
- * ORANG 1 - 3.1 Paging & Memory Manager
- * ================================================================================= */
+#include "header/process/process.h"
 
 /**
  * _paging_kernel_page_directory and _paging_kernel_page_table is initialized on kernel-entrypoint.s
@@ -165,3 +162,84 @@ bool paging_free_user_page_frame(struct PageDirectory *page_dir, void *virtual_a
     flush_single_tlb((void *) virtual_page);
     return true;
 }
+
+__attribute__((aligned(0x1000))) static struct PageDirectory page_directory_list[PAGING_DIRECTORY_TABLE_MAX_COUNT] = {0};
+
+static struct {
+    bool page_directory_used[PAGING_DIRECTORY_TABLE_MAX_COUNT];
+} page_directory_manager = {
+    .page_directory_used = {false},
+};
+
+struct PageDirectory* paging_create_new_page_directory(void) {
+    for (uint32_t i = 0; i < PAGING_DIRECTORY_TABLE_MAX_COUNT; i++) {
+        if (page_directory_manager.page_directory_used[i])
+            continue;
+
+        page_directory_manager.page_directory_used[i] = true;
+        struct PageDirectory *dir = &page_directory_list[i];
+        memset(dir, 0, sizeof(struct PageDirectory));
+
+        // Same kernel higher-half mapping the kernel directory uses
+        dir->table[KERNEL_VIRTUAL_ADDRESS_BASE >> 22] =
+            _paging_kernel_page_directory.table[KERNEL_VIRTUAL_ADDRESS_BASE >> 22];
+
+        // Self-reference at index 1023, same as the kernel directory has, in case
+        // anything (e.g. swap.c) still reads page tables through 0xFFC00000
+        dir->table[RECURSIVE_PAGE_DIRECTORY_INDEX] = (struct PageDirectoryEntry) {
+            .flag = { .present_bit = 1, .write_bit = 1 },
+            .page_table_base_address = ((uint32_t) dir - KERNEL_VIRTUAL_ADDRESS_BASE) >> 12,
+        };
+        return dir;
+    }
+    return NULL;
+}
+
+bool paging_free_page_directory(struct PageDirectory *page_dir) {
+    // Never free the directory the CPU is currently using
+    if (page_dir == paging_get_current_page_directory_addr())
+        return false;
+
+    for (uint32_t i = 0; i < PAGING_DIRECTORY_TABLE_MAX_COUNT; i++) {
+        if (&page_directory_list[i] != page_dir || !page_directory_manager.page_directory_used[i])
+            continue;
+
+        // Give back every user page frame and page table this directory still owns
+        for (uint32_t d = 0; d < (KERNEL_VIRTUAL_ADDRESS_BASE >> 22); d++) {
+            if (!page_dir->table[d].flag.present_bit)
+                continue;
+
+            struct PageTable *pt = (struct PageTable *)
+                (((uint32_t) page_dir->table[d].page_table_base_address << 12) + KERNEL_VIRTUAL_ADDRESS_BASE);
+
+            for (uint32_t t = 0; t < PAGE_ENTRY_COUNT; t++) {
+                if (!pt->table[t].flag.present_bit)
+                    continue;
+                uint32_t frame = pt->table[t].physical_page_base_address;
+                if (frame >= KERNEL_RESERVED_PAGE_FRAME_COUNT && frame < PAGE_FRAME_USABLE_COUNT
+                    && page_manager_state.page_frame_map[frame]) {
+                    page_manager_state.page_frame_map[frame] = false;
+                    page_manager_state.free_page_frame_count++;
+                }
+            }
+
+            uint32_t pool_index = (uint32_t) (pt - user_page_table_list);
+            if (pool_index < PAGE_TABLE_POOL_COUNT)
+                user_page_table_used[pool_index] = false;
+        }
+
+        memset(page_dir, 0, sizeof(struct PageDirectory));
+        page_directory_manager.page_directory_used[i] = false;
+        return true;
+    }
+    return false;
+}
+
+void paging_use_page_directory(struct PageDirectory *page_dir_virtual_addr) {
+    uint32_t physical_addr_page_dir = (uint32_t) page_dir_virtual_addr;
+    // Additional layer of check & mistake safety net
+    if ((uint32_t) page_dir_virtual_addr > KERNEL_VIRTUAL_ADDRESS_BASE)
+        physical_addr_page_dir -= KERNEL_VIRTUAL_ADDRESS_BASE;
+    __asm__  volatile("mov %0, %%cr3" : /* <Empty> */ : "r"(physical_addr_page_dir): "memory");
+}
+

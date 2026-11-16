@@ -200,7 +200,7 @@ void handle_syscall(struct InterruptFrame *frame) {
             break;
         }
         case SYS_EXIT: {
-            int current_pid = process_get_current_running_pid();
+            int current_pid = scheduler_get_current_running_pid();
             if (current_pid >= 0) {
                 _process_list[current_pid].metadata.state = PROCESS_STATE_TERMINATED;
                 scheduler_switch_to_next_process();

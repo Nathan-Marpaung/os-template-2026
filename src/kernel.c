@@ -12,7 +12,7 @@
 #include "header/process/process.h"
 
 void kernel_setup(void) {
-    // 1. Basic Kernel Initializations
+    // Basic Kernel Initializations
     load_gdt(&_gdt_gdtr);
     pic_remap();
     initialize_idt();
@@ -20,7 +20,7 @@ void kernel_setup(void) {
     framebuffer_clear();
     framebuffer_set_cursor(0, 0);
 
-    // 2. Filesystem & TSS Initializations
+    // Filesystem & TSS Initializations
     initialize_filesystem_ext2();
     gdt_install_tss();
     set_tss_register();
@@ -31,7 +31,6 @@ void kernel_setup(void) {
         ((uint32_t) &_paging_kernel_page_directory - KERNEL_VIRTUAL_ADDRESS_BASE) >> 12,
 };
 
-    // 4. Load "shell" Binary from Root Directory (Inode 1) into Virtual Address 0x0
     struct EXT2DriverRequest request = {
         .buf = (uint8_t*) 0,
         .name = "shell",
@@ -40,7 +39,6 @@ void kernel_setup(void) {
         .name_len = 5,
     };
     
-    // 5. Prepare TSS Kernel Stack and Jump to Ring 3
     set_tss_kernel_current_stack();
     int32_t pr = process_create_user_process(request);   // .buf=0, .name="shell", .parent_inode=1, .buffer_size=0x100000, .name_len=5
     if (pr != PROCESS_CREATE_SUCCESS) {

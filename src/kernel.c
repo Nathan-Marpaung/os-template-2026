@@ -10,6 +10,7 @@
 #include "header/filesystem/ext2.h"
 #include "header/memory/paging.h"
 #include "header/process/process.h"
+#include "header/scheduler/scheduler.h"
 
 void kernel_setup(void) {
     // Basic Kernel Initializations
@@ -50,4 +51,7 @@ void kernel_setup(void) {
     kernel_execute_user_program((void*) 0x0);
 
     while (true);
+
+    scheduler_init();
+    scheduler_switch_to_next_process();
 }

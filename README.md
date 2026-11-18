@@ -27,6 +27,7 @@ Sistem operasi 32-bit x86 sederhana untuk Tugas Besar IF2130 Sistem Operasi 2026
   - [Milestone 1: Interrupt, Driver](#milestone-1-interrupt-driver)
   - [Milestone 2: File System EXT2](#milestone-2-file-system-ext2)
   - [Milestone 3: Paging, User Mode, Shell](#milestone-3-paging-user-mode-shell)
+  - [Milestone 4: Process, Scheduler, Multitasking](#milestone-4-process-scheduler-multitasking)
   - [Perintah Shell](#perintah-shell)
 - [Struktur Repository](#struktur-repository)
 - [Maskot Kelompok](#maskot-kelompok)
@@ -52,7 +53,7 @@ sudo apt install nasm gcc-multilib binutils genisoimage qemu-system-x86 qemu-uti
 ### Build dan Jalankan
 
 ```bash
-make insert-shell   # buat bin/storage.bin, compile shell, masukkan ke root disk
+make insert-user    # buat disk, compile dan masukkan shell, clock, serta hello
 make iso            # compile kernel dan buat bin/OS2025.iso
 qemu-system-i386 -drive file=bin/storage.bin,format=raw,if=ide,index=0,media=disk -cdrom bin/OS2025.iso
 ```
@@ -92,7 +93,7 @@ Lanjutkan eksekusi dengan salah satu cara:
 - Hubungkan GDB (`target remote :1234`, lalu `continue`).
 - Ketik `c` di monitor QEMU.
 
-`make run` tidak memasukkan shell ke disk, jadi jalankan `make insert-shell` dulu.
+`make run` tidak memasukkan program user ke disk, jadi jalankan `make insert-user` dulu.
 
 ### Tes di Host
 
@@ -154,8 +155,25 @@ Menggunakan EXT2 – IF2130 Edition di disk ATA 4 MiB.
   | 6 | `puts` | cetak string berwarna |
   | 7 | `keyboard_on` | aktifkan input keyboard |
   | 8 | `clear_screen` | bersihkan layar |
+  | 9 | `exec` | jalankan executable sebagai process baru |
+  | 10 | `ps` | ambil daftar process dan pemakaian memorinya |
+  | 11 | `kill` | hentikan process berdasarkan PID |
+  | 12 | `exit` | hentikan process yang sedang berjalan |
+  | 13 | `get_time` | baca tanggal dan waktu dari CMOS RTC |
+  | 14 | `putchar_at` | tulis karakter di posisi tertentu tanpa menggeser cursor |
+  | 15 | `yield` | berikan sisa time slice ke process lain |
+  | 16 | `get_pid` | ambil PID process yang sedang berjalan |
 
 - **Terminal di kernel:** output syscall mendukung `\n`, `\t`, backspace, pindah baris otomatis dan scroll.
+
+### Milestone 4: Process, Scheduler, Multitasking
+
+- **Process:** setiap program user punya `ProcessControlBlock`, context register, dan page directory sendiri. Shell adalah process 0 (PID 0).
+- **Page directory per process:** image, heap, dan stack user dipetakan ke alamat virtual `0x0..0x400000`, sedangkan higher half kernel dipakai bersama.
+- **Scheduler:** PIT channel 0 memicu IRQ0 pada 100 Hz. Handler IRQ0 menyimpan context process yang sedang berjalan, lalu `process_context_switch()` melakukan `iret` ke process round robin berikutnya.
+- **Context switch assembly:** `src/process/context-switch.s` memuat CR3 baru, mengembalikan register, dan masuk kembali ke ring 3.
+- **Multitasking:** `exec`, `ps`, `kill`, `exit`, dan `yield` tersedia lewat syscall. Process dapat menunggu keyboard atau waktu dengan `yield` supaya tidak memonopoli CPU.
+- **Program eksternal:** `hello` adalah flat binary terpisah yang dijalankan lewat `exec hello`, bukan hardcode di shell. `clock` menampilkan waktu WIB di sudut kanan bawah.
 
 ### Perintah Shell
 
@@ -174,6 +192,9 @@ Path bisa relatif atau absolut, dan bisa memakai `.` serta `..`.
 | `mv <src> <dst>` | pindah atau ganti nama file |
 | `find <name>` | cari file atau folder dengan nama persis, mulai dari `/` |
 | `grep <pola> [file]` | tampilkan baris yang mengandung pola |
+| `exec <file>` | jalankan program user sebagai process baru |
+| `ps` | tampilkan PID, state, memori, dan nama process |
+| `kill <pid>` | hentikan process selain PID 0 |
 | `a \| b` | output `a` jadi input `b`, maksimal 8 tahap |
 
 Argumen yang berisi spasi ditulis di dalam tanda kutip, misalnya `cat notes.txt | grep "apel merah"`.
@@ -197,12 +218,13 @@ src/
 ├── linker.ld             # linker script kernel (higher half)
 ├── user-linker.ld        # linker script program user (flat binary di 0x0)
 ├── cpu/                  # GDT, IDT, interrupt, syscall, port I/O
-├── driver/               # keyboard
+├── driver/               # keyboard dan CMOS RTC
 ├── filesystem/           # disk ATA dan EXT2
-├── memory/               # paging
+├── memory/               # paging dan page directory per process
+├── process/              # PCB, scheduler, dan context switch assembly
 ├── text/                 # framebuffer dan terminal
 ├── stdlib/               # memset, memcpy, memcmp, memmove
-├── user/                 # shell dan wrapper syscall sisi user
+├── user/                 # shell, clock, hello, dan wrapper syscall sisi user
 ├── external/             # inserter (program host)
 └── header/               # header semua modul di atas
 tests/                    # tes host untuk EXT2 dan shell

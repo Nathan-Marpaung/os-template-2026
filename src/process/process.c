@@ -135,6 +135,13 @@ int32_t process_create_user_process(struct EXT2DriverRequest request) {
         memset((uint8_t *) entrypoint + binary_size, 0, image_size - binary_size);
         memset((void *) (PROCESS_STACK_TOP - PROCESS_STACK_SIZE), 0, PROCESS_STACK_SIZE);
     }
+
+    if (!mapped) {
+        // paging_free_page_directory() only releases page tables; release the
+        // data frames while their directory is still active.
+        for (uint32_t i = 0; i < new_pcb->memory.page_frame_used_count; i++)
+            paging_free_user_page_frame(page_dir, new_pcb->memory.virtual_addr_used[i]);
+    }
     paging_use_page_directory(previous_page_dir);
 
     if (!mapped) {
@@ -168,7 +175,22 @@ bool process_destroy(uint32_t pid) {
     if (pcb == NULL)
         return false;
 
-    paging_free_page_directory(pcb->context.page_directory_virtual_addr);
+    struct PageDirectory *target_page_dir = pcb->context.page_directory_virtual_addr;
+    struct PageDirectory *current_page_dir = paging_get_current_page_directory_addr();
+
+    // paging_get_page_table() is recursive-mapping based and only works for
+    // the active directory. Free the process data frames first, then switch
+    // away so paging_free_page_directory() accepts the now inactive target.
+    paging_use_page_directory(target_page_dir);
+    for (uint32_t i = 0; i < pcb->memory.page_frame_used_count; i++)
+        paging_free_user_page_frame(target_page_dir, pcb->memory.virtual_addr_used[i]);
+
+    struct PageDirectory *restore_page_dir = current_page_dir == target_page_dir
+                                           ? &_paging_kernel_page_directory
+                                           : current_page_dir;
+    paging_use_page_directory(restore_page_dir);
+
+    paging_free_page_directory(target_page_dir);
     memset(pcb, 0, sizeof(struct ProcessControlBlock));
     process_manager_state.active_process_count--;
     return true;

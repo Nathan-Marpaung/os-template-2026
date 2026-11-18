@@ -3,6 +3,7 @@
 #include "header/cpu/portio.h"
 #include "header/driver/keyboard.h"
 #include "header/driver/cmos.h"
+#include "header/process/scheduler.h"
 #include "header/filesystem/ext2.h"
 #include "header/text/framebuffer.h"
 #include "header/syscall-number.h"
@@ -63,8 +64,30 @@ void activate_keyboard_interrupt(void) {
     out(PIC1_DATA, in(PIC1_DATA) & ~(1 << IRQ_KEYBOARD));
 }
 
+void activate_timer_interrupt(void) {
+    __asm__ volatile("cli");
+
+    // Channel 0, square wave, LOBYTE/HOBYTE access, binary counter.
+    out(PIT_COMMAND_REGISTER_PIO, PIT_COMMAND_VALUE);
+    out(PIT_CHANNEL_0_DATA_PIO, (uint8_t) (PIT_TIMER_COUNTER & 0xFF));
+    out(PIT_CHANNEL_0_DATA_PIO, (uint8_t) ((PIT_TIMER_COUNTER >> 8) & 0xFF));
+
+    // Unmask IRQ0. Interrupts are re-enabled by the iret that enters user mode.
+    out(PIC1_DATA, in(PIC1_DATA) & ~(1 << IRQ_TIMER));
+}
+
+static bool is_from_user_mode(struct InterruptFrame *frame) {
+    return (frame->int_stack.cs & 0x3) == 0x3;
+}
+
 void main_interrupt_handler(struct InterruptFrame frame) {
     switch (frame.int_number) {
+        case PIC1_OFFSET + IRQ_TIMER:
+            pic_ack(IRQ_TIMER);
+            // The kernel itself is not preemptible; only user processes are.
+            if (is_from_user_mode(&frame) && process_get_current_running_pcb_pointer() != NULL)
+                scheduler_preempt(frame);
+            break;
         case PIC1_OFFSET + IRQ_KEYBOARD:
             keyboard_isr();
             break;

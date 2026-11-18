@@ -769,7 +769,7 @@ static void parse_and_execute(char *line) {
 }
 
 int main(void) {
-    print_text("Welcome to OSama Shell (Ring 3)\n");
+    print_text("Welcome to OSama\n");
     char input_buffer[MAX_INPUT_SIZE];
     while (true) {
         print_text("OSama@user:$ ");

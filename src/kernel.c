@@ -14,6 +14,7 @@
 #include "header/scheduler/scheduler.h"
 #include "header/kernel-entrypoint.h"
 
+#if DISK_DRIVER_SELF_TEST || FS_SELF_TEST || SWAP_SELF_TEST
 static void framebuffer_write_text(
     uint8_t row,
     uint8_t col,
@@ -26,6 +27,7 @@ static void framebuffer_write_text(
         ++text;
     }
 }
+#endif
 
 static void framebuffer_scroll(void) {
     uint8_t *video_memory = FRAMEBUFFER_MEMORY_OFFSET;
@@ -168,7 +170,6 @@ void kernel_setup(void) {
 
     framebuffer_clear();
     framebuffer_set_cursor(0, 0);
-    framebuffer_write_text(0, 0, "OSama kernel started", 0x0F);
     initialize_filesystem_ext2();
     gdt_install_tss();
     set_tss_register();
@@ -205,12 +206,14 @@ void kernel_setup(void) {
     }
 #endif
 
+#if SWAP_SELF_TEST
     framebuffer_write_text(2, 0, "Swap & Page Fault (0xE) test: ", 0x0F);
     if (swap_self_test()) {
         framebuffer_write_text(2, 30, "PASS", 0x0A);
     } else {
         framebuffer_write_text(2, 30, "FAIL", 0x0C);
     }
+#endif
 
     struct EXT2DriverRequest shell_request = {
         .buf = (void *)0,

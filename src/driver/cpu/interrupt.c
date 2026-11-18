@@ -72,7 +72,7 @@ void pic_remap(void) {
     out(PIC2_DATA, PIC_DISABLE_ALL_MASK);
 }
 
-static uint8_t syscall_cursor_row = 3;
+static uint8_t syscall_cursor_row = 0;
 static uint8_t syscall_cursor_col = 0;
 static volatile uint32_t system_ticks;
 

@@ -111,20 +111,26 @@ set_tss_register:
     ret
 
 kernel_execute_user_program:
+    cli
+
+    ; Switch to the process page directory before touching its user address space
+    mov eax, [esp+8]           ; page_dir_virtual_addr
+    sub eax, KERNEL_VIRTUAL_BASE
+    mov cr3, eax
+
     mov eax, 0x20 | 0x3        ; GDT_USER_DATA_SEGMENT_SELECTOR, ring 3
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
 
-    mov ecx, [esp+4]           ; Save first (before pushing anything to stack) for last push
+    mov ecx, [esp+4]           ; entrypoint, saved before any push
     push eax                   ; user ss
     mov eax, ecx
     add eax, 0x400000 - 4
-    push eax                   ; user esp, last 4 MiB
-    pushf                      ; eflags
+    push eax                   ; user esp, top of the user stack region
+    push dword 0x202           ; eflags: base flag + interrupt enable
     mov eax, 0x18 | 0x3
     push eax                   ; user cs
-    mov eax, ecx
-    push eax                   ; eip
+    push ecx                   ; eip
     iret

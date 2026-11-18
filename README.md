@@ -9,9 +9,9 @@ Sistem operasi 32-bit x86 sederhana untuk Tugas Besar IF2130 Sistem Operasi 2026
 | Nama | NIM |
 |---|---|
 | Ahmad Humam Isma | 13525032 |
-| Christopherus Michael J Tobing | TODO |
-| Muhammad Fauzi Muharam | TODO |
-| I Made Ardana | TODO |
+| Christopherus Michael J Tobing | 13525109 |
+| Muhammad Fauzi Muharam | 13525091 |
+| I Made Ardana | 13525121 |
 
 ## Daftar Isi
 

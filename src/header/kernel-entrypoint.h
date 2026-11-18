@@ -19,9 +19,13 @@ extern void load_gdt(struct GDTR *gdtr);
 extern void set_tss_register(void);
 
 /**
- * Execute user program from kernel, one way jump. Implemented in kernel-entrypoint.s.
- * User stack pointer is set to virtual_addr + 4 MiB - 4, so that region must be mapped.
+ * Switch to a process page directory and jump into its user entrypoint.
+ * One way jump, implemented in kernel-entrypoint.s.
+ *
+ * @param virtual_addr         User entrypoint (flat binary linked at 0)
+ * @param page_dir_virtual_addr Kernel virtual address of the process page directory
+ * @note User stack pointer is set to PROCESS_STACK_TOP - 4, so that page must be mapped.
  */
-extern void kernel_execute_user_program(void *virtual_addr);
+extern void kernel_execute_user_program(void *virtual_addr, void *page_dir_virtual_addr);
 
 #endif

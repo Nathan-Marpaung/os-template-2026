@@ -7,6 +7,8 @@
 #include "header/text/framebuffer.h"
 #include "header/memory/paging.h"
 #include "header/scheduler/scheduler.h"
+#include "header/driver/cmos.h"
+#include "header/stdlib/syscall_nums.h"
 #include <stdint.h>
 
 void io_wait(void) {
@@ -90,6 +92,20 @@ void syscall(struct InterruptFrame frame) {
             break;
         case 7: 
             keyboard_state_activate();
+            break;
+        case SYSCALL_GET_TIME:
+            if (frame.cpu.general.ebx < 0xC0000000)
+                cmos_read_time((struct CMOSTime*) frame.cpu.general.ebx);
+            break;
+        case SYSCALL_PUTS_AT:
+            if (frame.cpu.general.ebx < 0xC0000000)
+                framebuffer_puts_at(
+                    (frame.cpu.general.edx >> 16) & 0xFF,   // row
+                    (frame.cpu.general.edx >> 8)  & 0xFF,   // col
+                    (char*) frame.cpu.general.ebx,
+                    frame.cpu.general.ecx,
+                    frame.cpu.general.edx & 0xFF            // color
+                );
             break;
     }
 }

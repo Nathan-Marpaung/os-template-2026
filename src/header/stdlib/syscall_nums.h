@@ -11,5 +11,7 @@
 #define SYSCALL_KEYBOARD    7
 #define SYSCALL_CLEAR_SCR   8
 #define SYSCALL_EXIT        10
+#define SYSCALL_GET_TIME    20
+#define SYSCALL_PUTS_AT     21
 
 #endif

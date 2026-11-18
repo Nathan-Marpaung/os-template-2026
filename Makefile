@@ -20,8 +20,8 @@ LFLAGS        = -T $(SOURCE_FOLDER)/linker.ld -melf_i386
 .PHONY: run all build clean kernel iso disk
 
 # 'disk' hanya membuat storage.bin jika belum ada (isi disk lama tidak ditimpa)
-run: all disk insert-shell 
-	@qemu-system-i386 -s \
+run: all disk insert-shell insert-clock
+	@qemu-system-i386 -s -rtc base=localtime \
 		-drive file=$(OUTPUT_FOLDER)/$(DISK_NAME).bin,format=raw,if=ide,index=0,media=disk \
 		-cdrom $(OUTPUT_FOLDER)/$(ISO_NAME).iso
 all: build
@@ -48,6 +48,7 @@ kernel:
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/paging.c -o $(OUTPUT_FOLDER)/paging.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/process.c -o $(OUTPUT_FOLDER)/process.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/scheduler.c -o $(OUTPUT_FOLDER)/scheduler.o
+	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/cmos.c -o $(OUTPUT_FOLDER)/cmos.o
 	@$(LIN) $(LFLAGS) $(OUTPUT_FOLDER)/*.o -o $(OUTPUT_FOLDER)/kernel
 	@echo Linking object files and generate elf32...
 	@rm -f *.o
@@ -97,5 +98,21 @@ user-shell:
 
 insert-shell: inserter user-shell
 	@echo Inserting shell into root directory...
-	@cd $(OUTPUT_FOLDER); ./inserter shell 1 $(DISK_NAME).bin
+	@cd $(OUTPUT_FOLDER); ./inserter -f shell 1 $(DISK_NAME).bin
+
+user-clock:
+	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
+	@$(CC)  $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/clock.c -o clock.o
+	@$(CC)  $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/stdlib/string.c -o string.o
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 --oformat=binary \
+		crt0.o clock.o string.o -o $(OUTPUT_FOLDER)/clock
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 --oformat=elf32-i386 \
+		crt0.o clock.o string.o -o $(OUTPUT_FOLDER)/clock_elf
+	@echo Linking clock object files and generate flat binary...
+	@size --target=binary $(OUTPUT_FOLDER)/clock
+	@rm -f *.o
+
+insert-clock: inserter user-clock
+	@echo Inserting clock into root directory...
+	@cd $(OUTPUT_FOLDER); ./inserter -f clock 1 $(DISK_NAME).bin
 

@@ -31,7 +31,7 @@ void framebuffer_clear(void) {
 }
 
 static void framebuffer_scroll(void) {
-    for (uint8_t row = 1; row < 25; row++) {
+    for (uint8_t row = 1; row < FRAMEBUFFER_TERMINAL_HEIGHT; row++) {
         for (uint8_t col = 0; col < 80; col++) {
             uint16_t src = 2 * (row * 80 + col);
             uint16_t dst = 2 * ((row - 1) * 80 + col);
@@ -40,7 +40,7 @@ static void framebuffer_scroll(void) {
         }
     }
     for (uint8_t col = 0; col < 80; col++) {
-        framebuffer_write(24, col, 0x00, 0x07, 0x00);
+        framebuffer_write(FRAMEBUFFER_TERMINAL_HEIGHT - 1, col, 0x00, 0x07, 0x00);
     }
 }
 
@@ -69,10 +69,18 @@ void puts(const char *buf, uint32_t count, uint32_t color) {
             }
         }
 
-        if (cursor_row >= 25) {
+        // Terminal shell hanya baris 0-23, baris 24 dicadangkan untuk clock
+        if (cursor_row >= FRAMEBUFFER_TERMINAL_HEIGHT) {      // dulu: >= 25
             framebuffer_scroll();
-            cursor_row = 24;
+            cursor_row = FRAMEBUFFER_TERMINAL_HEIGHT - 1;     // dulu: 24
         }
     }
     framebuffer_set_cursor(cursor_row, cursor_col);
+}
+
+void framebuffer_puts_at(uint8_t row, uint8_t col, const char *buf, uint32_t count, uint8_t color) {
+    if (row >= FRAMEBUFFER_HEIGHT || col >= FRAMEBUFFER_WIDTH)
+        return;
+    for (uint32_t i = 0; i < count && col + i < FRAMEBUFFER_WIDTH; i++)
+        framebuffer_write(row, (uint8_t) (col + i), buf[i], color & 0x0F, (color >> 4) & 0x0F);
 }

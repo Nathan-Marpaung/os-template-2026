@@ -9,6 +9,11 @@
 #define FRAMEBUFFER_MEMORY_OFFSET ((uint8_t*) 0xC00B8000)
 #define CURSOR_PORT_CMD    0x03D4
 #define CURSOR_PORT_DATA   0x03D5
+#define FRAMEBUFFER_WIDTH           80
+#define FRAMEBUFFER_HEIGHT          25
+// Baris terakhir (24) dicadangkan untuk status bar (clock), terminal shell hanya baris 0-23
+#define FRAMEBUFFER_STATUS_ROW      24
+#define FRAMEBUFFER_TERMINAL_HEIGHT 24
 
 /**
  * Terminal framebuffer
@@ -47,5 +52,11 @@ void framebuffer_set_cursor(uint8_t r, uint8_t c);
 void framebuffer_clear(void);
 
 void puts(const char *buf, uint32_t count, uint32_t color);
+/**
+ * Tulis string pada posisi (row, col) tanpa menggeser cursor terminal.
+ * Dipakai program yang menggambar di lokasi tetap, misalnya clock di status bar.
+ * Karakter yang melewati kolom 79 akan dipotong.
+ */
+void framebuffer_puts_at(uint8_t row, uint8_t col, const char *buf, uint32_t count, uint8_t color);
 
 #endif

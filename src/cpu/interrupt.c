@@ -132,12 +132,49 @@ void syscall(struct InterruptFrame frame) {
         case SYSCALL_CLEAR_SCREEN:
             framebuffer_reset_terminal();
             break;
+        case SYSCALL_EXEC:
+            *((int32_t*) ecx) = process_create_user_process(*(struct EXT2DriverRequest*) ebx);
+            break;
+        case SYSCALL_PS:
+            *((uint32_t*) edx) = process_get_info_list((struct ProcessInfo*) ebx, ecx);
+            break;
+        case SYSCALL_KILL: {
+            struct ProcessControlBlock *target = process_get_pcb_by_pid(ebx);
+            if (target == NULL) {
+                *((int8_t*) ecx) = PROCESS_KILL_NOT_FOUND;
+            } else if (target->metadata.pid == 0) {
+                *((int8_t*) ecx) = PROCESS_KILL_NOT_PERMITTED;
+            } else {
+                *((int8_t*) ecx) = PROCESS_KILL_SUCCESS;
+                process_destroy(ebx);
+                if (process_get_current_running_pcb_pointer() == target)
+                    scheduler_switch_to_next_process();
+            }
+            break;
+        }
+        case SYSCALL_EXIT: {
+            struct ProcessControlBlock *current = process_get_current_running_pcb_pointer();
+            if (current != NULL) {
+                process_destroy(current->metadata.pid);
+                scheduler_switch_to_next_process();
+            }
+            break;
+        }
         case SYSCALL_GET_TIME:
             cmos_read_rtc((struct RTCTime*) ebx);
             break;
         case SYSCALL_PUTCHAR_AT:
             framebuffer_write((edx >> 8) & 0xFF, edx & 0xFF, (char) ebx, (uint8_t) ecx, 0);
             break;
+        case SYSCALL_YIELD:
+            if (process_get_current_running_pcb_pointer() != NULL)
+                scheduler_preempt(frame);
+            break;
+        case SYSCALL_GET_PID: {
+            struct ProcessControlBlock *current = process_get_current_running_pcb_pointer();
+            *((uint32_t*) ebx) = current != NULL ? current->metadata.pid : 0;
+            break;
+        }
         default:
             break;
     }

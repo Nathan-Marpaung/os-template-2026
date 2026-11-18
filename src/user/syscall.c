@@ -49,6 +49,41 @@ void sys_clear_screen(void) {
     syscall(SYSCALL_CLEAR_SCREEN, 0, 0, 0);
 }
 
+int32_t sys_exec(struct EXT2DriverRequest *request) {
+    int32_t retcode = -1;
+    syscall(SYSCALL_EXEC, (uint32_t) request, (uint32_t) &retcode, 0);
+    return retcode;
+}
+
+uint32_t sys_ps(struct ProcessInfo *info, uint32_t capacity) {
+    uint32_t count = 0;
+    syscall(SYSCALL_PS, (uint32_t) info, capacity, (uint32_t) &count);
+    return count;
+}
+
+int8_t sys_kill(uint32_t pid) {
+    int8_t retcode = -1;
+    syscall(SYSCALL_KILL, pid, (uint32_t) &retcode, 0);
+    return retcode;
+}
+
+void sys_exit(void) {
+    syscall(SYSCALL_EXIT, 0, 0, 0);
+    // The kernel switches away and never resumes this process.
+    while (true)
+        ;
+}
+
+void sys_yield(void) {
+    syscall(SYSCALL_YIELD, 0, 0, 0);
+}
+
+uint32_t sys_get_pid(void) {
+    uint32_t pid = 0;
+    syscall(SYSCALL_GET_PID, (uint32_t) &pid, 0, 0);
+    return pid;
+}
+
 void sys_get_time(struct RTCTime *time) {
     syscall(SYSCALL_GET_TIME, (uint32_t) time, 0, 0);
 }

@@ -6,6 +6,7 @@ static int32_t scheduler_last_index = -1;
 
 void scheduler_init(void) {
     scheduler_last_index = -1;
+    activate_timer_interrupt();
 }
 
 void scheduler_save_context_to_current_running_pcb(struct Context ctx) {

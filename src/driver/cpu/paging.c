@@ -283,13 +283,61 @@ bool paging_free_page_directory(struct PageDirectory *page_dir) {
             continue;
         }
 
-        if (paging_get_current_page_directory_addr() == page_dir) {
-            paging_use_page_directory(&_paging_kernel_page_directory);
+        struct PageDirectory *old_page_dir =
+            paging_get_current_page_directory_addr();
+        paging_use_page_directory(page_dir);
+
+        for (uint32_t pde_index = 0; pde_index < 768u; pde_index++) {
+            struct PageDirectoryEntry *dir_entry = &page_dir->table[pde_index];
+            if (!dir_entry->flag.present_bit ||
+                (pde_index == 0 &&
+                 dir_entry->lower_address ==
+                     page_dir->table[768].lower_address)) {
+                continue;
+            }
+
+            struct PageTable *page_table =
+                (struct PageTable *)(RECURSIVE_PAGE_TABLES_VIRTUAL_ADDRESS +
+                                     pde_index * PAGE_FRAME_SIZE);
+            for (uint32_t pte_index = 0;
+                 pte_index < PAGE_ENTRY_COUNT;
+                 pte_index++) {
+                struct PageTableEntry *page_entry =
+                    &page_table->table[pte_index];
+                if (!page_entry->flag.user_supervisor) {
+                    continue;
+                }
+
+                if (page_entry->flag.present_bit) {
+                    uint32_t page_frame_index = page_entry->lower_address;
+                    if (page_frame_index >= KERNEL_RESERVED_PAGE_FRAME_COUNT &&
+                        page_frame_index < PAGE_FRAME_MAX_COUNT &&
+                        page_manager_state.page_frame_map[page_frame_index]) {
+                        page_manager_state.page_frame_map[page_frame_index] = false;
+                        page_manager_state.free_page_frame_count++;
+                    }
+                }
+                if (page_entry->flag.present_bit ||
+                    page_entry->ignored == PTE_SWAP_MARKER) {
+                    void *virtual_addr = (void *)(
+                        (pde_index << 22) | (pte_index << 12)
+                    );
+                    swap_track_page_freed(page_dir, virtual_addr);
+                }
+            }
         }
 
-        for (uint32_t pde_index = 1; pde_index < 768u; pde_index++) {
+        paging_use_page_directory(
+            old_page_dir != NULL && old_page_dir != page_dir
+                ? old_page_dir
+                : &_paging_kernel_page_directory
+        );
+
+        for (uint32_t pde_index = 0; pde_index < 768u; pde_index++) {
             struct PageDirectoryEntry *entry = &page_dir->table[pde_index];
-            if (!entry->flag.present_bit) {
+            if (!entry->flag.present_bit ||
+                (pde_index == 0 &&
+                 entry->lower_address == page_dir->table[768].lower_address)) {
                 continue;
             }
 

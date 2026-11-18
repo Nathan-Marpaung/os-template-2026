@@ -18,8 +18,10 @@ int main(void) {
 
     while (true) {
         sys_get_time(&time);
-        if (time.second == last_second)
+        if (time.second == last_second) {
+            sys_yield(); // let the shell and other processes run between redraws
             continue;
+        }
         last_second = time.second;
 
         uint8_t hour = (time.hour + TIMEZONE_OFFSET) % 24;

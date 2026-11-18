@@ -65,6 +65,34 @@ char sys_getchar(void) {
     return *script++;
 }
 
+int32_t sys_exec(struct EXT2DriverRequest *r) {
+    (void) r;
+    return 4; // no process creation in the host harness
+}
+
+uint32_t sys_ps(struct ProcessInfo *info, uint32_t capacity) {
+    if (capacity == 0)
+        return 0;
+    info[0].pid              = 0;
+    info[0].state            = PROCESS_STATE_RUNNING;
+    info[0].page_frame_count = 128;
+    memset(info[0].name, 0, sizeof(info[0].name));
+    memcpy(info[0].name, "shell", 5);
+    return 1;
+}
+
+int8_t sys_kill(uint32_t pid) {
+    (void) pid;
+    return PROCESS_KILL_NOT_FOUND;
+}
+
+uint32_t sys_get_pid(void) {
+    return 0;
+}
+
+void sys_yield(void) {}
+void sys_exit(void) { for (;;) {} }
+
 static const char *run(const char *input) {
     script  = input;
     out_len = 0;
@@ -106,7 +134,13 @@ int main(void) {
     run("help\n\nfoo\n");
     HAS("keOSbOS:/$ ");
     HAS("mkdir <dir>");
+    HAS("exec <file>");
     HAS("foo: command not found");
+
+    // ps shows the init shell
+    run("ps\n");
+    HAS("PID");
+    HAS("shell (this shell)");
 
     // ls / cat on root
     run("ls\ncat hello.txt\n");

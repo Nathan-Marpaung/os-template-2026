@@ -203,6 +203,9 @@ static void cmd_help(void) {
     out_print("  mv <src> <dst>  move or rename file\n", COLOR_TEXT);
     out_print("  find <name>     search by name from /\n", COLOR_TEXT);
     out_print("  grep <pat> [file]  print lines containing pat\n", COLOR_TEXT);
+    out_print("  exec <file>     run program as a new process\n", COLOR_TEXT);
+    out_print("  ps              list running processes\n", COLOR_TEXT);
+    out_print("  kill <pid>      terminate a process\n", COLOR_TEXT);
     out_print("  clear           clear screen\n", COLOR_TEXT);
     out_print("  a | b           pipe output of a into b\n", COLOR_TEXT);
     out_print("                  e.g. ls | grep txt, cat f | grep \"a b\"\n", COLOR_TEXT);
@@ -573,14 +576,142 @@ static void cmd_grep(int argc, char **argv, bool has_input) {
     }
 }
 
+/* -- Process commands -- */
+
+static void out_uint(uint32_t value, uint32_t width, uint8_t color) {
+    char     buf[10];
+    uint32_t len = 0;
+    do {
+        buf[len++] = '0' + value % 10;
+        value /= 10;
+    } while (value && len < sizeof(buf));
+    for (uint32_t i = len; i < width; i++)
+        out_putchar(' ', color);
+    while (len--)
+        out_putchar(buf[len], color);
+}
+
+static void out_padded(const char *s, uint32_t width, uint8_t color) {
+    uint32_t len = str_len(s);
+    out_puts(s, len, color);
+    for (uint32_t i = len; i < width; i++)
+        out_putchar(' ', color);
+}
+
+static bool parse_uint(const char *s, uint32_t *value) {
+    if (*s == '\0')
+        return false;
+    uint32_t result = 0;
+    for (; *s; s++) {
+        if (*s < '0' || *s > '9' || result > 100000000u)
+            return false;
+        result = result * 10 + (uint32_t) (*s - '0');
+    }
+    *value = result;
+    return true;
+}
+
+// Start path in a new process. The kernel assigns the PID; the shell discovers
+// it by asking PS for the highest PID, as EXEC only returns a status code.
+static void exec_program(const char *cmd, const char *path) {
+    uint32_t    parent, name_len;
+    const char *name;
+    if (!split_path(path, &parent, &name, &name_len)) {
+        print_error(cmd, path, "no such file");
+        return;
+    }
+
+    struct EXT2DriverRequest req = {
+        .buf          = (void*) 0,   // user programs are flat binaries linked at 0
+        .name         = (char*) name,
+        .name_len     = name_len,
+        .parent_inode = parent,
+        .buffer_size  = 0,
+        .is_directory = false,
+    };
+    int32_t ret = sys_exec(&req);
+    switch (ret) {
+        case 0: {
+            struct ProcessInfo info[PROCESS_COUNT_MAX];
+            uint32_t count = sys_ps(info, PROCESS_COUNT_MAX), pid = 0;
+            for (uint32_t i = 0; i < count; i++)
+                if (info[i].pid > pid)
+                    pid = info[i].pid;
+            out_print("started ", COLOR_TEXT);
+            out_puts(name, name_len, COLOR_TEXT);
+            // A short-lived program may exit before PS runs, leaving pid 0.
+            if (pid > 0) {
+                out_print(" with pid ", COLOR_TEXT);
+                out_uint(pid, 0, COLOR_TEXT);
+            }
+            out_putchar('\n', COLOR_TEXT);
+            break;
+        }
+        case 1:  print_error(cmd, path, "too many processes"); break;
+        case 2:  print_error(cmd, path, "invalid entrypoint"); break;
+        case 3:  print_error(cmd, path, "not enough memory or program too large"); break;
+        case 4:  print_error(cmd, path, "no such file"); break;
+        default: print_error(cmd, path, "failed"); break;
+    }
+}
+
+static void cmd_exec(int argc, char **argv) {
+    if (argc < 2) {
+        print_error("exec", NULL, "missing operand");
+        return;
+    }
+    exec_program("exec", argv[1]);
+}
+
+static void cmd_ps(void) {
+    struct ProcessInfo info[PROCESS_COUNT_MAX];
+    uint32_t count = sys_ps(info, PROCESS_COUNT_MAX);
+    uint32_t self  = sys_get_pid();
+
+    out_print("  PID  STATE    MEM(KiB)  NAME\n", COLOR_DIR);
+    for (uint32_t i = 0; i < count; i++) {
+        out_uint(info[i].pid, 5, COLOR_TEXT);
+        out_print("  ", COLOR_TEXT);
+        const char *state = info[i].state == PROCESS_STATE_RUNNING ? "running" : "ready";
+        out_padded(state, 9, COLOR_TEXT);
+        out_uint(info[i].page_frame_count * 4, 8, COLOR_TEXT);
+        out_print("  ", COLOR_TEXT);
+        out_print(info[i].name, COLOR_TEXT);
+        if (info[i].pid == self)
+            out_print(" (this shell)", COLOR_TEXT);
+        out_putchar('\n', COLOR_TEXT);
+    }
+}
+
+static void cmd_kill(int argc, char **argv) {
+    if (argc < 2) {
+        print_error("kill", NULL, "missing operand");
+        return;
+    }
+    uint32_t pid;
+    if (!parse_uint(argv[1], &pid)) {
+        print_error("kill", argv[1], "invalid pid");
+        return;
+    }
+    int8_t ret = sys_kill(pid);
+    if (ret == PROCESS_KILL_NOT_FOUND)
+        print_error("kill", argv[1], "no such process");
+    else if (ret == PROCESS_KILL_NOT_PERMITTED)
+        print_error("kill", argv[1], "cannot kill the init shell");
+    else if (ret != PROCESS_KILL_SUCCESS)
+        print_error("kill", argv[1], "failed");
+}
+
 /* -- Main loop -- */
 
 static void read_line(void) {
     uint32_t len = 0;
     while (true) {
         char c = sys_getchar();
-        if (c == 0)
+        if (c == 0) {
+            sys_yield(); // let other processes use the CPU while waiting for input
             continue;
+        }
         if (c == '\n') {
             sys_putchar('\n', COLOR_TEXT);
             break;
@@ -669,6 +800,12 @@ static void run_command(int argc, char **argv, bool has_input) {
         cmd_find(argc, argv);
     else if (name_equal(cmd, len, "grep", 4))
         cmd_grep(argc, argv, has_input);
+    else if (name_equal(cmd, len, "exec", 4))
+        cmd_exec(argc, argv);
+    else if (name_equal(cmd, len, "ps", 2))
+        cmd_ps();
+    else if (name_equal(cmd, len, "kill", 4))
+        cmd_kill(argc, argv);
     else
         print_error(cmd, NULL, "command not found, try help");
 }

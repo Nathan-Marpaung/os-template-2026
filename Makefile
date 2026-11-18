@@ -24,7 +24,8 @@ run: all disk
 all: build
 build: iso
 clean:
-	rm -rf *.o *.iso $(OUTPUT_FOLDER)/*.o $(OUTPUT_FOLDER)/*.iso $(OUTPUT_FOLDER)/kernel $(OUTPUT_FOLDER)/iso
+	rm -rf *.o *.iso $(OUTPUT_FOLDER)/*.o $(OUTPUT_FOLDER)/*.iso $(OUTPUT_FOLDER)/kernel $(OUTPUT_FOLDER)/iso \
+		$(OUTPUT_FOLDER)/inserter $(OUTPUT_FOLDER)/shell $(OUTPUT_FOLDER)/clock $(OUTPUT_FOLDER)/hello
 
 disk: $(DISK_IMAGE)
 
@@ -72,6 +73,23 @@ insert-clock: disk inserter user-clock
 	@echo Inserting clock into root directory...
 	@cd $(OUTPUT_FOLDER); ./inserter -f clock 1 $(DISK_NAME).bin
 
+user-hello:
+	@mkdir -p $(OUTPUT_FOLDER)
+	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
+	@$(CC) $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/user/hello.c -o hello.o
+	@$(CC) $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/user/syscall.c -o syscall.o
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 --oformat=binary \
+		crt0.o hello.o syscall.o -o $(OUTPUT_FOLDER)/hello
+	@echo Linking hello object files and generate flat binary...
+	@size --target=binary $(OUTPUT_FOLDER)/hello
+	@rm -f *.o
+
+insert-hello: disk inserter user-hello
+	@echo Inserting hello into root directory...
+	@cd $(OUTPUT_FOLDER); ./inserter -f hello 1 $(DISK_NAME).bin
+
+insert-user: insert-shell insert-clock insert-hello
+
 kernel:
 	@$(ASM) $(AFLAGS) src/kernel-entrypoint.s -o bin/kernel-entrypoint.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/kernel.c -o $(OUTPUT_FOLDER)/kernel.o
@@ -104,4 +122,4 @@ iso: kernel
 	@genisoimage -R -b boot/grub/grub1 -no-emul-boot -boot-load-size 4 -A os -input-charset utf8 -boot-info-table -o $(OUTPUT_FOLDER)/$(ISO_NAME).iso $(OUTPUT_FOLDER)/iso
 	@rm -r $(OUTPUT_FOLDER)/iso/
 
-.PHONY: run all build clean disk kernel iso inserter user-shell insert-shell user-clock insert-clock
+.PHONY: run all build clean disk kernel iso inserter user-shell insert-shell user-clock insert-clock user-hello insert-hello insert-user

@@ -175,6 +175,19 @@ void flush_single_tlb(void *virtual_addr);
  */
 struct PageDirectory* paging_get_current_page_directory_addr(void);
 
+/* --- Multiple virtual address space (Chapter 4) --- */
+#define PAGING_DIRECTORY_TABLE_MAX_COUNT 32
+
+// Ambil PD kosong dari pool, isi mapping kernel (0x300) dan recursive (1023)
+struct PageDirectory* paging_create_new_page_directory(void);
+
+// Kembalikan PD ke pool + bebaskan page table user. PD yang sedang aktif tidak bisa di-free.
+// Bebaskan frame user (paging_free_user_page_frame) dulu selagi PD ini aktif.
+bool paging_free_page_directory(struct PageDirectory *page_dir);
+
+// Muat PD ke CR3 (sekaligus flush TLB)
+void paging_use_page_directory(struct PageDirectory *page_dir_virtual_addr);
+
 /* --- Memory Management --- */
 /**
  * Check whether a certain amount of physical memory is available

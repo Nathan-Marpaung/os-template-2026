@@ -128,7 +128,6 @@ void flush_single_tlb(void *virtual_addr) {
 
 
 /* --- Memory Management --- */
-// TODO: Implement
 bool paging_allocate_check(uint32_t amount) {
     uint32_t required_frames = (amount + PAGE_FRAME_SIZE - 1) / PAGE_FRAME_SIZE;
     return page_manager_state.free_page_frame_count >= required_frames;
@@ -136,16 +135,6 @@ bool paging_allocate_check(uint32_t amount) {
 
 
 bool paging_allocate_user_page_frame(struct PageDirectory *page_dir, void *virtual_addr) {
-    /**
-     * TODO: Find free physical frame and map virtual frame into it
-     * - Find free physical frame in page_manager_state.page_frame_map[] using any strategies
-     * - Mark page_manager_state.page_frame_map[]
-     * - Update page directory with user flags:
-     *     > present bit    true
-     *     > write bit      true
-     *     > user bit       true
-     *     > pagesize 4 mb  true
-     */ 
     uint32_t page_directory_index = ((uint32_t)virtual_addr >> 22) & 0x3FF;
     uint32_t page_table_index = ((uint32_t)virtual_addr >> 12) & 0x3FF;
 
@@ -204,11 +193,6 @@ bool paging_allocate_user_page_frame(struct PageDirectory *page_dir, void *virtu
 }
 
 bool paging_free_user_page_frame(struct PageDirectory *page_dir, void *virtual_addr) {
-    /* 
-     * TODO: Deallocate a physical frame from respective virtual address
-     * - Use the page_dir.table values to check mapped physical frame
-     * - Remove the entry by setting it into 0
-     */
     uint32_t page_directory_index = ((uint32_t)virtual_addr >> 22) & 0x3FF;
     uint32_t page_table_index = ((uint32_t)virtual_addr >> 12) & 0x3FF;
 
@@ -302,6 +286,22 @@ bool paging_free_page_directory(struct PageDirectory *page_dir) {
         if (paging_get_current_page_directory_addr() == page_dir) {
             paging_use_page_directory(&_paging_kernel_page_directory);
         }
+
+        for (uint32_t pde_index = 1; pde_index < 768u; pde_index++) {
+            struct PageDirectoryEntry *entry = &page_dir->table[pde_index];
+            if (!entry->flag.present_bit) {
+                continue;
+            }
+
+            uint32_t page_frame_index = entry->lower_address;
+            if (page_frame_index >= KERNEL_RESERVED_PAGE_FRAME_COUNT &&
+                page_frame_index < PAGE_FRAME_MAX_COUNT &&
+                page_manager_state.page_frame_map[page_frame_index]) {
+                page_manager_state.page_frame_map[page_frame_index] = false;
+                page_manager_state.free_page_frame_count++;
+            }
+        }
+
         memset(page_dir, 0, sizeof(*page_dir));
         page_directory_used[i] = false;
         return true;

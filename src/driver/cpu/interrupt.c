@@ -201,10 +201,11 @@ void handle_syscall(struct InterruptFrame *frame) {
         }
         case SYS_EXIT: {
             int current_pid = scheduler_get_current_running_pid();
-            if (current_pid >= 0) {
-                _process_list[current_pid].metadata.state = PROCESS_STATE_TERMINATED;
+            if (current_pid >= 0 &&
+                process_destroy((uint32_t)current_pid)) {
                 scheduler_switch_to_next_process();
             }
+            frame->cpu.general.eax = (uint32_t)-1;
             break;
         }
         case SYS_PS: {
@@ -216,11 +217,16 @@ void handle_syscall(struct InterruptFrame *frame) {
         }
         case SYS_KILL: {
             int32_t target_pid = (int32_t) frame->cpu.general.ebx;
-            if (target_pid >= 0 && target_pid < PROCESS_COUNT_MAX) {
-                _process_list[target_pid].metadata.state = PROCESS_STATE_TERMINATED;
+            int current_pid = scheduler_get_current_running_pid();
+            if (target_pid >= 0 &&
+                target_pid < PROCESS_COUNT_MAX &&
+                process_destroy((uint32_t)target_pid)) {
                 frame->cpu.general.eax = 0;
+                if (target_pid == current_pid) {
+                    scheduler_switch_to_next_process();
+                }
             } else {
-                frame->cpu.general.eax = -1;
+                frame->cpu.general.eax = (uint32_t)-1;
             }
             break;
         }

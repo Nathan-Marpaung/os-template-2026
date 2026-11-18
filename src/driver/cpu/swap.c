@@ -368,15 +368,23 @@ void page_fault_handler(struct InterruptFrame frame) {
     uint32_t error_code    = frame.int_stack.error_code;
     uint32_t aligned_vaddr = fault_addr & ~(PAGE_FRAME_SIZE - 1u);
 
+    struct PageDirectory *active_page_dir =
+        paging_get_current_page_directory_addr();
+    if (active_page_dir == NULL) {
+        while (true) {
+            __asm__ volatile("cli; hlt");
+        }
+    }
+
     // Handle non-present page fault (Present bit == 0 in error_code)
     if ((error_code & PAGE_FAULT_ERROR_PRESENT) == 0) {
-        if (swap_is_page_swapped_out(&_paging_kernel_page_directory, (void *)aligned_vaddr)) {
-            if (swap_in(&_paging_kernel_page_directory, (void *)aligned_vaddr)) {
+        if (swap_is_page_swapped_out(active_page_dir, (void *)aligned_vaddr)) {
+            if (swap_in(active_page_dir, (void *)aligned_vaddr)) {
                 return;
             }
         } else if (aligned_vaddr < 0xC0000000u) {
             // Demand paging for unmapped user-space virtual address
-            if (paging_allocate_user_page_frame(&_paging_kernel_page_directory, (void *)aligned_vaddr)) {
+            if (paging_allocate_user_page_frame(active_page_dir, (void *)aligned_vaddr)) {
                 return;
             }
         }

@@ -8,6 +8,7 @@
 #include "header/kernel-entrypoint.h"
 #include "header/memory/paging.h"
 #include "header/process/process.h"
+#include "header/process/scheduler.h"
 #include "header/stdlib/string.h"
 #include "header/text/framebuffer.h"
 
@@ -52,19 +53,10 @@ void kernel_setup(void)
             __asm__ volatile("hlt");
     }
 
-    struct ProcessControlBlock *init_process = process_get_pcb_by_pid(0);
-    init_process->metadata.state = PROCESS_STATE_RUNNING;
-
+    // Start scheduler and jump into the first process. Its saved EFLAGS has
+    // interrupts enabled, so the timer IRQ will start preempting after iret.
     set_tss_kernel_current_stack();
     keyboard_state_activate();
-
-    // One way jump into the first process. The scheduler will take over when C merges.
-    kernel_execute_user_program(
-        (void *) init_process->context.eip,
-        init_process->context.page_directory_virtual_addr
-    );
-
-    // Unreachable
-    while (true)
-        __asm__ volatile("hlt");
+    scheduler_init();
+    scheduler_switch_to_next_process();
 }

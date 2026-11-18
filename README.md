@@ -84,8 +84,39 @@ jalankan `make disk`.
 - Filesystem EXT2 pada disk 4 MB. Filesystem dibuat saat boot jika disk masih
   kosong; tersedia operasi untuk membuat, membaca, dan menghapus file/direktori,
   serta membaca isi direktori.
-- Input keyboard saat ini ditampilkan sebagai teks pada layar. Belum ada shell
-  untuk menjalankan perintah.
+- Shell user-mode Ring 3 dengan input keyboard, process management, dan
+  perintah dasar filesystem.
+
+## Perintah Shell
+
+Setelah OS boot, perintah berikut tersedia:
+
+```text
+help
+clear
+ls [path]
+cd [path]
+mkdir path
+rmdir path
+cat file
+cp source destination
+mv source destination
+rm file
+find [path] [pattern]
+grep pattern file
+ps
+kill pid
+exec file
+time
+exit
+```
+
+`find` mencocokkan pola sebagai substring pada nama/path dan membatasi
+penelusuran hingga 8 tingkat direktori. `cat`, `cp`, `mv`, dan `grep` mendukung
+file sampai 8192 byte; `cp`/`mv` hanya menangani file non-kosong dan tidak
+menimpa tujuan yang sudah ada. `rmdir` hanya berhasil untuk direktori kosong.
+Pembacaan/listing direktori dibatasi hingga 1024 byte. Path dibatasi hingga 127
+karakter.
 
 
 ```bash

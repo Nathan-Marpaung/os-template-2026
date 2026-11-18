@@ -89,7 +89,80 @@ struct PageDirectory* paging_get_current_page_directory_addr(void) {
     return (struct PageDirectory*) (current_page_directory_phys_addr + KERNEL_VIRTUAL_ADDRESS_BASE);
 }
 
+/* --- Multiple virtual address space --- */
+#define KERNEL_PAGE_DIRECTORY_INDEX (KERNEL_VIRTUAL_ADDRESS_BASE >> 22)   // 0x300
 
+__attribute__((aligned(0x1000))) static struct PageDirectory page_directory_list[PAGING_DIRECTORY_TABLE_MAX_COUNT];
+
+static struct {
+    bool page_directory_used[PAGING_DIRECTORY_TABLE_MAX_COUNT];
+} page_directory_manager = {
+    .page_directory_used = {false},
+};
+
+struct PageDirectory* paging_create_new_page_directory(void) {
+    for (uint32_t i = 0; i < PAGING_DIRECTORY_TABLE_MAX_COUNT; i++) {
+        if (page_directory_manager.page_directory_used[i])
+            continue;
+
+        page_directory_manager.page_directory_used[i] = true;
+        struct PageDirectory *page_dir = &page_directory_list[i];
+        memset(page_dir, 0, sizeof(struct PageDirectory));
+
+        // Kernel higher half: pakai page table 4 KiB milik kernel (CR4.PSE dimatikan,
+        // jadi tidak boleh pakai entry 4 MiB seperti di TODO kit)
+        page_dir->table[KERNEL_PAGE_DIRECTORY_INDEX] =
+            _paging_kernel_page_directory.table[KERNEL_PAGE_DIRECTORY_INDEX];
+
+        // Recursive mapping: PDE[1023] menunjuk ke PD ini sendiri (dipakai paging_get_page_table)
+        uint32_t page_dir_phys_addr = (uint32_t) page_dir - KERNEL_VIRTUAL_ADDRESS_BASE;
+        page_dir->table[RECURSIVE_PAGE_DIRECTORY_INDEX].flag = (struct PageDirectoryEntryFlag) {
+            .present_bit = true,
+            .write_bit   = true,
+        };
+        page_dir->table[RECURSIVE_PAGE_DIRECTORY_INDEX].page_table_base_address = page_dir_phys_addr >> 12;
+
+        return page_dir;
+    }
+    return NULL;
+}
+
+bool paging_free_page_directory(struct PageDirectory *page_dir) {
+    // Jangan pernah free PD yang sedang aktif di CR3
+    if (page_dir == NULL || page_dir == paging_get_current_page_directory_addr())
+        return false;
+
+    for (uint32_t i = 0; i < PAGING_DIRECTORY_TABLE_MAX_COUNT; i++) {
+        if (&page_directory_list[i] != page_dir)
+            continue;
+        if (!page_directory_manager.page_directory_used[i])
+            return false;
+
+        // Kembalikan frame page table bagian user ke page frame manager
+        for (uint32_t pd_index = 0; pd_index < KERNEL_PAGE_DIRECTORY_INDEX; pd_index++) {
+            if (!page_dir->table[pd_index].flag.present_bit)
+                continue;
+            uint32_t frame = page_dir->table[pd_index].page_table_base_address;
+            if (frame >= KERNEL_RESERVED_PAGE_FRAME_COUNT && frame < PAGE_FRAME_MAX_COUNT &&
+                page_manager_state.page_frame_map[frame]) {
+                page_manager_state.page_frame_map[frame] = false;
+                page_manager_state.free_page_frame_count++;
+            }
+        }
+
+        memset(page_dir, 0, sizeof(struct PageDirectory));
+        page_directory_manager.page_directory_used[i] = false;
+        return true;
+    }
+    return false;
+}
+
+void paging_use_page_directory(struct PageDirectory *page_dir_virtual_addr) {
+    uint32_t physical_addr_page_dir = (uint32_t) page_dir_virtual_addr;
+    if ((uint32_t) page_dir_virtual_addr >= KERNEL_VIRTUAL_ADDRESS_BASE)
+        physical_addr_page_dir -= KERNEL_VIRTUAL_ADDRESS_BASE;
+    __asm__ volatile("mov %0, %%cr3" : /* <Empty> */ : "r"(physical_addr_page_dir) : "memory");
+}
 
 /* --- Memory Management --- */
 bool paging_allocate_check(uint32_t amount) {

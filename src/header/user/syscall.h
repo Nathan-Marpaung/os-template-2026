@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include "header/filesystem/ext2.h"
 #include "header/syscall-number.h"
+#include "header/driver/cmos.h"
 
 /**
  * Raise int 0x30 with eax = number and ebx / ecx / edx = arguments.
@@ -25,5 +26,10 @@ void sys_putchar(char c, uint8_t color);
 void sys_puts(const char *str, uint32_t len, uint8_t color);
 void sys_keyboard_on(void);
 void sys_clear_screen(void);
+
+// Read current date & time from CMOS RTC
+void sys_get_time(struct RTCTime *time);
+// Print a character at a fixed screen position, does not move the cursor
+void sys_putchar_at(char c, uint8_t row, uint8_t col, uint8_t color);
 
 #endif

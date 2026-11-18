@@ -19,7 +19,7 @@
  * SYSCALL_PS              ebx: struct ProcessInfo*, ecx: capacity, edx: uint32_t* count
  * SYSCALL_KILL            ebx: pid, ecx: int8_t* retcode
  * SYSCALL_EXIT            no argument, terminate current process and reschedule
- * SYSCALL_GET_TIME        ebx: struct RTCTime* output
+ * SYSCALL_GET_TIME        ebx: struct RTCTime* output (see header/driver/cmos.h)
  * SYSCALL_PUTCHAR_AT      ebx: char, ecx: color, edx: (row << 8) | col
  * SYSCALL_YIELD            no argument, voluntarily give up CPU
  * SYSCALL_GET_PID          ebx: uint32_t* output

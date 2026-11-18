@@ -217,9 +217,13 @@ void kernel_setup(void) {
         .name = "shell",
         .name_len = 5,
         .parent_inode = 1,
-        .buffer_size = 4 * PAGE_FRAME_SIZE,
+        .buffer_size = 0,
         .is_directory = false,
     };
+    uint32_t shell_size = 0;
+    if (get_file_size(&shell_request, &shell_size) == 0) {
+        shell_request.buffer_size = shell_size;
+    }
     set_tss_kernel_current_stack();
     if (process_create_user_process(shell_request) == PROCESS_CREATE_SUCCESS) {
         scheduler_init();

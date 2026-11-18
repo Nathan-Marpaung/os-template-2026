@@ -74,6 +74,7 @@ void pic_remap(void) {
 
 static uint8_t syscall_cursor_row = 3;
 static uint8_t syscall_cursor_col = 0;
+static volatile uint32_t system_ticks;
 
 static void framebuffer_scroll_up(void) {
     uint8_t *video_memory = FRAMEBUFFER_MEMORY_OFFSET;
@@ -111,92 +112,98 @@ static void framebuffer_write_char(char c, uint8_t color) {
     framebuffer_set_cursor(syscall_cursor_row, syscall_cursor_col);
 }
 
-void syscall(struct InterruptFrame frame) {
-    switch (frame.cpu.general.eax) {
-        case 0: {
-            struct EXT2DriverRequest req = *(struct EXT2DriverRequest *)frame.cpu.general.ebx;
-            int8_t ret;
-            if (req.is_directory) {
-                if (req.name_len == 0) {
-                    req.name     = ".";
-                    req.name_len = 1;
+void handle_syscall(struct InterruptFrame *frame) {
+    switch (frame->cpu.general.eax) {
+        case SYS_READ: {
+            struct EXT2DriverRequest *request =
+                (struct EXT2DriverRequest *)frame->cpu.general.ebx;
+            if (request == NULL) {
+                frame->cpu.general.eax = (uint32_t)-1;
+                break;
+            }
+
+            struct EXT2DriverRequest local_request = *request;
+            int8_t result;
+            if (local_request.is_directory) {
+                if (local_request.name_len == 0) {
+                    local_request.name = ".";
+                    local_request.name_len = 1;
                 }
-                if (req.buffer_size > 2 * BLOCK_SIZE) {
-                    req.buffer_size = 2 * BLOCK_SIZE;
+                if (local_request.buffer_size > 2u * BLOCK_SIZE) {
+                    local_request.buffer_size = 2u * BLOCK_SIZE;
                 }
-                ret = read_directory(&req);
+                result = read_directory(&local_request);
             } else {
-                ret = read(req);
+                result = read(local_request);
             }
-            if (frame.cpu.general.ecx != 0) {
-                *(int32_t *)frame.cpu.general.ecx = (int32_t)ret;
-            }
+            frame->cpu.general.eax = (uint32_t)(int32_t)result;
             break;
         }
-        case 1: {
-            int8_t ret = write((struct EXT2DriverRequest *)frame.cpu.general.ebx);
-            if (frame.cpu.general.ecx != 0) {
-                *(int32_t *)frame.cpu.general.ecx = (int32_t)ret;
+        case SYS_WRITE: {
+            struct EXT2DriverRequest *request =
+                (struct EXT2DriverRequest *)frame->cpu.general.ebx;
+            frame->cpu.general.eax = request != NULL
+                ? (uint32_t)(int32_t)write(request)
+                : (uint32_t)-1;
+            break;
+        }
+        case SYS_READ_DIR: {
+            struct EXT2DriverRequest *request =
+                (struct EXT2DriverRequest *)frame->cpu.general.ebx;
+            if (request == NULL) {
+                frame->cpu.general.eax = (uint32_t)-1;
+                break;
             }
-            break;
-        }
-        case 2: {
-            int8_t ret = read_directory((struct EXT2DriverRequest *)frame.cpu.general.ebx);
-            if (frame.cpu.general.ecx != 0) {
-                *(int32_t *)frame.cpu.general.ecx = (int32_t)ret;
+
+            struct EXT2DriverRequest local_request = *request;
+            if (local_request.name_len == 0) {
+                local_request.name = ".";
+                local_request.name_len = 1;
             }
-            break;
-        }
-        case 3: {
-            int8_t ret = delete(*(struct EXT2DriverRequest *)frame.cpu.general.ebx);
-            if (frame.cpu.general.ecx != 0) {
-                *(int32_t *)frame.cpu.general.ecx = (int32_t)ret;
+            if (local_request.buffer_size > 2u * BLOCK_SIZE) {
+                local_request.buffer_size = 2u * BLOCK_SIZE;
             }
+            frame->cpu.general.eax =
+                (uint32_t)(int32_t)read_directory(&local_request);
             break;
         }
-        case 4:
-        case 5: {
-            get_keyboard_buffer((char *)frame.cpu.general.ebx);
+        case SYS_DELETE: {
+            struct EXT2DriverRequest *request =
+                (struct EXT2DriverRequest *)frame->cpu.general.ebx;
+            frame->cpu.general.eax = request != NULL
+                ? (uint32_t)(int32_t)delete(*request)
+                : (uint32_t)-1;
             break;
         }
-        case 6: {
-            uint8_t color = (uint8_t)frame.cpu.general.ecx;
-            if (frame.cpu.general.ebx < 0x100u) {
-                framebuffer_write_char((char)frame.cpu.general.ebx, color);
-            } else {
-                const char *str = (const char *)frame.cpu.general.ebx;
-                if (*str != '\0') {
-                    framebuffer_write_char(*str, color);
-                }
+        case SYS_PUTCHAR:
+            framebuffer_write_char(
+                (char)frame->cpu.general.ebx,
+                (uint8_t)frame->cpu.general.ecx
+            );
+            frame->cpu.general.eax = 0;
+            break;
+        case SYS_GETKEY: {
+            char key = 0;
+            get_keyboard_buffer(&key);
+            if (frame->cpu.general.ebx != 0) {
+                *(char *)frame->cpu.general.ebx = key;
             }
+            frame->cpu.general.eax = (uint8_t)key;
             break;
         }
-        case 7: {
+        case SYS_CLEAR_SCREEN:
             framebuffer_clear();
             syscall_cursor_row = 0;
             syscall_cursor_col = 0;
             framebuffer_set_cursor(0, 0);
-            break;
-        }
-        default:
-            frame.cpu.general.eax = (uint32_t)-1;
-            break;
-    }
-}
-
-void handle_syscall(struct InterruptFrame *frame) {
-    uint32_t syscall_number = frame->cpu.general.eax;
-
-    switch (syscall_number) {
-        case SYS_READ:
-            break;
-        case SYS_WRITE:
-            break;
-        case SYS_PUTCHAR:
+            frame->cpu.general.eax = 0;
             break;
         case SYS_EXEC: {
-            struct EXT2DriverRequest *request = (struct EXT2DriverRequest*) frame->cpu.general.ebx;
-            frame->cpu.general.eax = process_create_user_process(*request);
+            struct EXT2DriverRequest *request =
+                (struct EXT2DriverRequest *)frame->cpu.general.ebx;
+            frame->cpu.general.eax = request != NULL
+                ? (uint32_t)process_create_user_process(*request)
+                : (uint32_t)-1;
             break;
         }
         case SYS_EXIT: {
@@ -209,10 +216,14 @@ void handle_syscall(struct InterruptFrame *frame) {
             break;
         }
         case SYS_PS: {
-            char *buffer = (char*) frame->cpu.general.ebx;
-            uint32_t max_size = (uint32_t) frame->cpu.general.ecx;
-            process_get_list(buffer, max_size);
-            frame->cpu.general.eax = 0;
+            char *buffer = (char *)frame->cpu.general.ebx;
+            uint32_t max_size = frame->cpu.general.ecx;
+            if (buffer == NULL || max_size == 0) {
+                frame->cpu.general.eax = (uint32_t)-1;
+            } else {
+                process_get_list(buffer, max_size);
+                frame->cpu.general.eax = 0;
+            }
             break;
         }
         case SYS_KILL: {
@@ -230,12 +241,25 @@ void handle_syscall(struct InterruptFrame *frame) {
             }
             break;
         }
+        case SYS_GET_TIME:
+            frame->cpu.general.eax = system_ticks;
+            break;
+        case SYS_FILE_SIZE: {
+            struct EXT2DriverRequest *request =
+                (struct EXT2DriverRequest *)frame->cpu.general.ebx;
+            uint32_t *size = (uint32_t *)frame->cpu.general.ecx;
+            frame->cpu.general.eax = (uint32_t)(int32_t)
+                get_file_size(request, size);
+            break;
+        }
         default:
+            frame->cpu.general.eax = (uint32_t)-1;
             break;
     }
 }
 
 static void handle_timer_interrupt(struct InterruptFrame *frame) {
+    system_ticks++;
     pic_ack(IRQ_TIMER);
 
     if ((frame->int_stack.cs & 0x3u) != 0x3u ||
@@ -269,7 +293,7 @@ void main_interrupt_handler(struct InterruptFrame *frame) {
             pic_ack(IRQ_KEYBOARD);
             break;
         case 0x30:
-            syscall(*frame);
+            handle_syscall(frame);
             break;
         default:
             break;

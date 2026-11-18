@@ -1220,6 +1220,34 @@ int8_t read(struct EXT2DriverRequest request)
     return SUCCESS;
 }
 
+int8_t get_file_size(const struct EXT2DriverRequest *request, uint32_t *size)
+{
+    if (request == NULL || request->name == NULL || size == NULL) {
+        return ERR_UNKNOWN;
+    }
+
+    struct EXT2Inode parent_inode;
+    struct EXT2FoundEntry found;
+    if (!read_inode(request->parent_inode, &parent_inode) ||
+        (parent_inode.i_mode & EXT2_MODE_MASK) != EXT2_S_IFDIR) {
+        return ERR_INVALID_PARENT_READ;
+    }
+    if (!find_directory_entry(&parent_inode, request->name, request->name_len, &found)) {
+        return ERR_NOT_FOUND_READ;
+    }
+
+    struct EXT2Inode target_inode;
+    if (!read_inode(found.inode, &target_inode)) {
+        return ERR_UNKNOWN;
+    }
+    if ((target_inode.i_mode & EXT2_MODE_MASK) != EXT2_S_IFREG) {
+        return ERR_NOT_FILE;
+    }
+
+    *size = target_inode.i_size;
+    return SUCCESS;
+}
+
 int8_t read_directory(struct EXT2DriverRequest *request)
 {
     if (request == NULL) {

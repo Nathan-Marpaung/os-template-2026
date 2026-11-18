@@ -326,6 +326,11 @@ int8_t read_directory(struct EXT2DriverRequest *prequest);
 int8_t read(struct EXT2DriverRequest request);
 
 /**
+ * Get the size of a regular file without reading its contents.
+ */
+int8_t get_file_size(const struct EXT2DriverRequest *request, uint32_t *size);
+
+/**
  * @brief EXT2 write, write a file or a folder to file system
  *
  * @param All attribute will be used for write except is_dir, buffer_size == 0 then create a folder / directory. It is possible that exist file with name same as a folder

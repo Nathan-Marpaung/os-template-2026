@@ -47,10 +47,6 @@ void kernel_setup(void) {
         framebuffer_write(0, 1, '0' + pr, 0xC, 0);       // 1=max procs, 2=bad entry, 3=memory, 4=fs read
         while (true);
     }
-    paging_use_page_directory(_process_list[0].context.page_directory_virtual_addr);
-    kernel_execute_user_program((void*) 0x0);
-
-    while (true);
 
     scheduler_init();
     scheduler_switch_to_next_process();

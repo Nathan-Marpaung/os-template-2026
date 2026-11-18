@@ -639,8 +639,11 @@ static void exec_program(const char *cmd, const char *path) {
                     pid = info[i].pid;
             out_print("started ", COLOR_TEXT);
             out_puts(name, name_len, COLOR_TEXT);
-            out_print(" with pid ", COLOR_TEXT);
-            out_uint(pid, 0, COLOR_TEXT);
+            // A short-lived program may exit before PS runs, leaving pid 0.
+            if (pid > 0) {
+                out_print(" with pid ", COLOR_TEXT);
+                out_uint(pid, 0, COLOR_TEXT);
+            }
             out_putchar('\n', COLOR_TEXT);
             break;
         }

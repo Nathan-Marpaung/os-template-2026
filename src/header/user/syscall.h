@@ -28,7 +28,7 @@ void sys_keyboard_on(void);
 void sys_clear_screen(void);
 
 // Read current date & time from CMOS RTC
-void sys_get_time(struct Time *time);
+void sys_get_time(struct RTCTime *time);
 // Print a character at a fixed screen position, does not move the cursor
 void sys_putchar_at(char c, uint8_t row, uint8_t col, uint8_t color);
 

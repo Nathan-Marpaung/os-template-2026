@@ -21,7 +21,7 @@
  * Date and time read from the CMOS real-time clock.
  * Shared by the kernel driver and user programs (SYSCALL_GET_TIME).
  */
-struct Time {
+struct RTCTime {
     uint8_t  second;
     uint8_t  minute;
     uint8_t  hour;
@@ -35,6 +35,6 @@ struct Time {
  *
  * @param out_time Destination of the time value
  */
-void cmos_read_rtc(struct Time *out_time);
+void cmos_read_rtc(struct RTCTime *out_time);
 
 #endif

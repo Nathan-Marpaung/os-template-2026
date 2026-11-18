@@ -110,10 +110,10 @@ void syscall(struct InterruptFrame frame) {
             framebuffer_reset_terminal();
             break;
         case SYSCALL_GET_TIME:
-            cmos_read_rtc((struct Time*) ebx);
+            cmos_read_rtc((struct RTCTime*) ebx);
             break;
         case SYSCALL_PUTCHAR_AT:
-            framebuffer_write((ecx >> 8) & 0xFF, ecx & 0xFF, (char) ebx, (uint8_t) edx, 0);
+            framebuffer_write((edx >> 8) & 0xFF, edx & 0xFF, (char) ebx, (uint8_t) ecx, 0);
             break;
         default:
             break;

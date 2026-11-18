@@ -12,7 +12,7 @@ static bool cmos_update_in_progress(void) {
     return cmos_read_register(CMOS_REG_STATUS_A) & 0x80;
 }
 
-static void cmos_read_raw(struct Time *t) {
+static void cmos_read_raw(struct RTCTime *t) {
     while (cmos_update_in_progress());
     t->second = cmos_read_register(CMOS_REG_SECOND);
     t->minute = cmos_read_register(CMOS_REG_MINUTE);
@@ -22,7 +22,7 @@ static void cmos_read_raw(struct Time *t) {
     t->year   = cmos_read_register(CMOS_REG_YEAR);
 }
 
-static bool cmos_time_equal(struct Time *a, struct Time *b) {
+static bool cmos_time_equal(struct RTCTime *a, struct RTCTime *b) {
     return a->second == b->second && a->minute == b->minute && a->hour == b->hour &&
            a->day == b->day && a->month == b->month && a->year == b->year;
 }
@@ -31,8 +31,8 @@ static uint8_t bcd_to_binary(uint8_t value) {
     return (value & 0x0F) + ((value >> 4) * 10);
 }
 
-void cmos_read_rtc(struct Time *out_time) {
-    struct Time prev;
+void cmos_read_rtc(struct RTCTime *out_time) {
+    struct RTCTime prev;
 
     // Read twice until both results match, so we never get a half-updated value
     cmos_read_raw(out_time);

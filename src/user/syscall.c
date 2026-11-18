@@ -49,10 +49,10 @@ void sys_clear_screen(void) {
     syscall(SYSCALL_CLEAR_SCREEN, 0, 0, 0);
 }
 
-void sys_get_time(struct Time *time) {
+void sys_get_time(struct RTCTime *time) {
     syscall(SYSCALL_GET_TIME, (uint32_t) time, 0, 0);
 }
 
 void sys_putchar_at(char c, uint8_t row, uint8_t col, uint8_t color) {
-    syscall(SYSCALL_PUTCHAR_AT, (uint32_t) c, ((uint32_t) row << 8) | col, color);
+    syscall(SYSCALL_PUTCHAR_AT, (uint32_t) c, color, ((uint32_t) row << 8) | col);
 }

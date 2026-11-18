@@ -13,7 +13,7 @@ static void write_two_digit(char *buf, uint8_t value) {
 }
 
 int main(void) {
-    struct Time time;
+    struct RTCTime time;
     uint8_t last_second = 0xFF;
 
     while (true) {

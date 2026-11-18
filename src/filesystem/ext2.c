@@ -531,6 +531,23 @@ int8_t read(struct EXT2DriverRequest request) {
     return 0;
 }
 
+int8_t get_file_size(struct EXT2DriverRequest request, uint32_t *size) {
+    if (size == NULL || request.name == NULL || request.name_len == 0)
+        return -1;
+
+    struct EXT2Inode parent, target;
+    if (!load_parent_directory(request.parent_inode, &parent))
+        return 4;
+
+    uint32_t inode = find_entry(&parent, request.name, request.name_len, EXT2_FT_REG_FILE);
+    if (inode == 0)
+        return find_entry(&parent, request.name, request.name_len, EXT2_FT_UNKNOWN) != 0 ? 1 : 3;
+
+    read_inode(inode, &target);
+    *size = target.i_size;
+    return 0;
+}
+
 /* -- Write -- */
 
 // Total blocks (data + pointer tables) a node with `data_blocks` data blocks occupies

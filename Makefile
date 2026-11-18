@@ -57,6 +57,21 @@ insert-shell: disk inserter user-shell
 	@echo Inserting shell into root directory...
 	@cd $(OUTPUT_FOLDER); ./inserter -f shell 1 $(DISK_NAME).bin
 
+user-clock:
+	@mkdir -p $(OUTPUT_FOLDER)
+	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
+	@$(CC) $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/user/clock.c -o clock.o
+	@$(CC) $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/user/syscall.c -o syscall.o
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 --oformat=binary \
+		crt0.o clock.o syscall.o -o $(OUTPUT_FOLDER)/clock
+	@echo Linking clock object files and generate flat binary...
+	@size --target=binary $(OUTPUT_FOLDER)/clock
+	@rm -f *.o
+
+insert-clock: disk inserter user-clock
+	@echo Inserting clock into root directory...
+	@cd $(OUTPUT_FOLDER); ./inserter -f clock 1 $(DISK_NAME).bin
+
 kernel:
 	@$(ASM) $(AFLAGS) src/kernel-entrypoint.s -o bin/kernel-entrypoint.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/kernel.c -o $(OUTPUT_FOLDER)/kernel.o
@@ -66,6 +81,7 @@ kernel:
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/cpu/interrupt.c -o $(OUTPUT_FOLDER)/interrupt.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/text/framebuffer.c -o $(OUTPUT_FOLDER)/framebuffer.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/driver/keyboard.c -o $(OUTPUT_FOLDER)/keyboard.o
+	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/driver/cmos.c -o $(OUTPUT_FOLDER)/cmos.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/filesystem/disk.c -o $(OUTPUT_FOLDER)/disk.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/filesystem/ext2.c -o $(OUTPUT_FOLDER)/ext2.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/stdlib/string.c -o $(OUTPUT_FOLDER)/string.o
@@ -85,4 +101,4 @@ iso: kernel
 	@genisoimage -R -b boot/grub/grub1 -no-emul-boot -boot-load-size 4 -A os -input-charset utf8 -boot-info-table -o $(OUTPUT_FOLDER)/$(ISO_NAME).iso $(OUTPUT_FOLDER)/iso
 	@rm -r $(OUTPUT_FOLDER)/iso/
 
-.PHONY: run all build clean disk kernel iso inserter user-shell insert-shell
+.PHONY: run all build clean disk kernel iso inserter user-shell insert-shell user-clock insert-clock

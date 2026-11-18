@@ -2,6 +2,7 @@
 #include "header/cpu/gdt.h"
 #include "header/cpu/portio.h"
 #include "header/driver/keyboard.h"
+#include "header/driver/cmos.h"
 #include "header/filesystem/ext2.h"
 #include "header/text/framebuffer.h"
 #include "header/syscall-number.h"
@@ -107,6 +108,12 @@ void syscall(struct InterruptFrame frame) {
             break;
         case SYSCALL_CLEAR_SCREEN:
             framebuffer_reset_terminal();
+            break;
+        case SYSCALL_GET_TIME:
+            cmos_read_rtc((struct Time*) ebx);
+            break;
+        case SYSCALL_PUTCHAR_AT:
+            framebuffer_write((ecx >> 8) & 0xFF, ecx & 0xFF, (char) ebx, (uint8_t) edx, 0);
             break;
         default:
             break;

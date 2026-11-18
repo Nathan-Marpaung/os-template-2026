@@ -15,6 +15,8 @@
  * SYSCALL_PUTS            ebx: char*, ecx: length, edx: color
  * SYSCALL_KEYBOARD_ON     no argument, start listening to the keyboard
  * SYSCALL_CLEAR_SCREEN    no argument, clear screen and reset cursor
+ * SYSCALL_GET_TIME        ebx: struct Time* (see header/driver/cmos.h)
+ * SYSCALL_PUTCHAR_AT      ebx: char, ecx: (row << 8) | col, edx: color
  */
 #define SYSCALL_READ           0
 #define SYSCALL_READ_DIRECTORY 1
@@ -25,5 +27,7 @@
 #define SYSCALL_PUTS           6
 #define SYSCALL_KEYBOARD_ON    7
 #define SYSCALL_CLEAR_SCREEN   8
+#define SYSCALL_GET_TIME       13
+#define SYSCALL_PUTCHAR_AT     14
 
 #endif

@@ -49,6 +49,59 @@ static bool user_request_ok(uint32_t request_addr, bool check_buffer)
     return true;
 }
 
+/* Buffer statis: syscall dijalankan tanpa reentrancy, dan terlalu besar untuk stack ISR */
+static struct ProcessArgvBlob syscall_argv_blob;
+
+/* Salin argc/argv dari struct ProcessArgs milik user ke kernel dengan validasi penuh. */
+static bool copy_user_args(uint32_t args_addr, struct ProcessArgvBlob *blob)
+{
+    blob->argc = 0;
+    blob->data_len = 0;
+
+    if (args_addr == 0 || !user_range_ok(args_addr, sizeof(struct ProcessArgs)))
+    {
+        return false;
+    }
+    struct ProcessArgs *user_args = (struct ProcessArgs *)args_addr;
+    uint32_t argc = user_args->argc;
+    uint32_t argv_addr = (uint32_t)user_args->argv;
+
+    if (argc == 0 || argc > PROCESS_ARGV_MAX_COUNT)
+    {
+        return false;
+    }
+    if (argv_addr == 0 || !user_range_ok(argv_addr, argc * sizeof(char *)))
+    {
+        return false;
+    }
+
+    char **argv = (char **)argv_addr;
+    for (uint32_t i = 0; i < argc; i++)
+    {
+        uint32_t str = (uint32_t)argv[i];
+        if (str == 0)
+        {
+            return false;
+        }
+        blob->offset[i] = blob->data_len;
+        while (true)
+        {
+            if (str >= USER_SPACE_END || blob->data_len >= PROCESS_ARGV_MAX_BYTES)
+            {
+                return false;
+            }
+            char c = *(const char *)str++;
+            blob->data[blob->data_len++] = c;
+            if (c == '\0')
+            {
+                break;
+            }
+        }
+    }
+    blob->argc = argc;
+    return true;
+}
+
 static void syscall_fs(uint32_t service, uint32_t request_addr, uint32_t retcode_addr)
 {
     if (retcode_addr == 0 || !user_range_ok(retcode_addr, sizeof(int8_t)))
@@ -185,8 +238,14 @@ uint32_t syscall_handler(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx)
             if (!user_request_ok(ebx, false)) {
                 *retcode = -1;
             }
+            else if (edx == 0) {
+                *retcode = process_create_user_process_args(*(struct EXT2DriverRequest *)ebx, NULL);
+            }
+            else if (!copy_user_args(edx, &syscall_argv_blob)) {
+                *retcode = -1;
+            }
             else {
-                *retcode = process_create_user_process(*(struct EXT2DriverRequest *)ebx);
+                *retcode = process_create_user_process_args(*(struct EXT2DriverRequest *)ebx, &syscall_argv_blob);
             }
         }
         break;

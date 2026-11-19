@@ -78,6 +78,13 @@ struct ProcessControlBlock {
 
 extern struct ProcessControlBlock _process_list[PROCESS_COUNT_MAX];
 
+struct ProcessArgvBlob {
+    uint32_t argc;
+    uint32_t data_len;
+    uint32_t offset[PROCESS_ARGV_MAX_COUNT];
+    char     data[PROCESS_ARGV_MAX_BYTES];
+};
+
 struct ProcessManagerState {
     uint32_t active_process_count;
     uint32_t next_pid;
@@ -99,6 +106,8 @@ struct ProcessControlBlock* process_get_current_running_pcb_pointer(void);
  * @return        Process creation return code
  */
 int32_t process_create_user_process(struct EXT2DriverRequest request);
+int32_t process_create_user_process_args(struct EXT2DriverRequest request, const struct ProcessArgvBlob *args);
+int32_t process_create_user_process_args(struct EXT2DriverRequest request, const struct ProcessArgvBlob *args);
 
 /**
  * Destroy process then release page directory and process control block

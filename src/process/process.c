@@ -60,6 +60,46 @@ static bool process_allocate_page(struct ProcessControlBlock *pcb, struct PageDi
     return true;
 }
 
+// Susun argc/argv di halaman stack user (CR3 process baru harus sedang aktif).
+// Layout (alamat naik), esp 16-byte aligned menunjuk ke argc:
+//   [argc][argv[0]..argv[argc-1]][NULL][string-string argv]
+static bool process_setup_user_stack(const struct ProcessArgvBlob *args, const char *default_name,
+                                     uint32_t default_name_len, uint32_t *out_esp) {
+    struct ProcessArgvBlob fallback;
+    if (args == NULL || args->argc == 0) {
+        if (default_name_len + 1 > PROCESS_ARGV_MAX_BYTES) return false;
+        memcpy(fallback.data, default_name, default_name_len);
+        fallback.data[default_name_len] = '\0';
+        fallback.data_len = default_name_len + 1;
+        fallback.argc = 1;
+        fallback.offset[0] = 0;
+        args = &fallback;
+    }
+    if (args->argc > PROCESS_ARGV_MAX_COUNT || args->data_len > PROCESS_ARGV_MAX_BYTES) return false;
+
+    const uint32_t stack_end = PROCESS_USER_STACK_PAGE + PAGE_FRAME_SIZE;
+
+    // 1. String argv di puncak stack (sisakan 16 byte di paling atas)
+    uint32_t strings_base = (stack_end - 16 - args->data_len) & ~0xFu;
+    memcpy((void *) strings_base, args->data, args->data_len);
+
+    // 2. Blok pointer: argc + argv[argc] + NULL, dibuat 16-byte aligned
+    uint32_t block_size = (1 + args->argc + 1) * sizeof(uint32_t);
+    uint32_t esp = (strings_base - block_size) & ~0xFu;
+    if (esp < PROCESS_USER_STACK_PAGE) return false;
+
+    uint32_t *block = (uint32_t *) esp;
+    block[0] = args->argc;
+    for (uint32_t i = 0; i < args->argc; i++) {
+        if (args->offset[i] >= args->data_len) return false;
+        block[1 + i] = strings_base + args->offset[i];
+    }
+    block[1 + args->argc] = 0;
+
+    *out_esp = esp;
+    return true;
+}
+
 // API PUBLIK
 
 struct ProcessControlBlock* process_get_current_running_pcb_pointer(void) {
@@ -71,6 +111,10 @@ struct ProcessControlBlock* process_get_current_running_pcb_pointer(void) {
 }
 
 int32_t process_create_user_process(struct EXT2DriverRequest request) {
+    return process_create_user_process_args(request, NULL);
+}
+
+int32_t process_create_user_process_args(struct EXT2DriverRequest request, const struct ProcessArgvBlob *args) {
     int32_t retcode = PROCESS_CREATE_SUCCESS;
     uint32_t eflags = process_interrupt_save_and_disable();
     struct PageDirectory *old_page_dir = paging_get_current_page_directory_addr();
@@ -152,14 +196,21 @@ int32_t process_create_user_process(struct EXT2DriverRequest request) {
         goto exit_cleanup;
     }
 
+    // argc/argv ke stack user (dilakukan setelah read() agar tidak tertimpa)
+    uint32_t user_esp;
+    if (!process_setup_user_stack(args, name, request.name_len, &user_esp)) {
+        retcode = PROCESS_CREATE_FAIL_NOT_ENOUGH_MEMORY;
+        goto exit_cleanup;
+    }
+
     // CONTEXT AWAL
     struct Context *ctx = &new_pcb->context;
     ctx->cpu.segment.ds = GDT_USER_DATA_SEGMENT_SELECTOR | 0x3;
     ctx->cpu.segment.es = GDT_USER_DATA_SEGMENT_SELECTOR | 0x3;
     ctx->cpu.segment.fs = GDT_USER_DATA_SEGMENT_SELECTOR | 0x3;
     ctx->cpu.segment.gs = GDT_USER_DATA_SEGMENT_SELECTOR | 0x3;
-    ctx->cpu.stack.esp = PROCESS_USER_STACK_TOP;
-    ctx->cpu.stack.ebp = PROCESS_USER_STACK_TOP;
+    ctx->cpu.stack.esp = user_esp;
+    ctx->cpu.stack.ebp = 0;
     ctx->eip = (uint32_t) request.buf;
     ctx->eflags = CPU_EFLAGS_BASE_FLAG | CPU_EFLAGS_FLAG_INTERRUPT_ENABLE;
     ctx->page_directory_virtual_addr = new_page_dir;

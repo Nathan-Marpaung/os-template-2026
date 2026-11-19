@@ -23,7 +23,7 @@
  *  11  | FS ukuran file         | struct EXT2DriverRequest *   | int8_t *return code   | uint32_t *size
  *  12  | exit                   | return code main()           | -                     | -
  *  13  | waktu CMOS (RTC)       | struct CMOSTime *            | -                     | -
- *  14  | puts di posisi tertentu| char * buffer                | jumlah karakter       | row | col << 8 | warna << 16
+*  15 | buat process (exec)    | struct EXT2DriverRequest *   | int32_t *return code  | struct ProcessArgs * (boleh 0)
  *  15 | buat process (exec)    | struct EXT2DriverRequest *   | int32_t *return code  | -
  *  16 | kill process           | pid                          | int8_t *hasil (1 ok)  | -
  *  17 | info process (ps)      | struct ProcessInfo * array   | kapasitas array       | uint32_t *jumlah
@@ -51,6 +51,18 @@
 #define SYSCALL_PROCESS_CREATE      15
 #define SYSCALL_PROCESS_KILL         16
 #define SYSCALL_PROCESS_INFO        17
+
+/**
+ * argc/argv untuk SYSCALL_PROCESS_CREATE (edx = struct ProcessArgs * milik user, 0 jika tanpa argumen).
+ * Jika edx == 0 maka program menerima argc = 1 dan argv[0] = nama program.
+ */
+#define PROCESS_ARGV_MAX_COUNT 32
+#define PROCESS_ARGV_MAX_BYTES 1024   /* total byte semua string termasuk NUL */
+
+struct ProcessArgs {
+    uint32_t argc;
+    char   **argv;
+};
 
 #define PROCESS_INFO_NAME_LENGTH 32
 struct ProcessInfo {

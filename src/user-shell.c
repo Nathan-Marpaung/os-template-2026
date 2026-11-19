@@ -1350,9 +1350,9 @@ static void cmd_grep(struct CmdCtx *ctx)
 
 static void cmd_exec(struct CmdCtx *ctx)
 {
-    if (ctx->argc != 2)
+    if (ctx->argc < 2 || ctx->argc - 1 > PROCESS_ARGV_MAX_COUNT)
     {
-        print_error("exec", NULL, "Penggunaan: exec <nama program>");
+        print_error("exec", NULL, "Penggunaan: exec <nama program> [argumen...]");
         return;
     }
 
@@ -1395,6 +1395,12 @@ static void cmd_exec(struct CmdCtx *ctx)
         false
     );
 
+    /* argv[0] = nama program (argumen shell ke-1), sisanya argumen user */
+    struct ProcessArgs proc_args = {
+        .argc = (uint32_t)(ctx->argc - 1),
+        .argv = &ctx->argv[1],
+    };
+
     /* Minta kernel membuat process baru */
     int32_t retcode = -1;
 
@@ -1402,9 +1408,8 @@ static void cmd_exec(struct CmdCtx *ctx)
         SYSCALL_PROCESS_CREATE,
         (uintptr_t)&request,
         (uintptr_t)&retcode,
-        0
+        (uintptr_t)&proc_args
     );
-
     if (retcode == 0)
     {
         ob_puts(ctx->out, "Process berhasil dibuat.\n");
@@ -1608,7 +1613,7 @@ static const struct Command commands[] = {
     {"mv", cmd_mv, "mv <src> <dst>       pindah / ganti nama file atau folder"},
     {"find", cmd_find, "find <nama>          cari file/folder di seluruh file system"},
     {"grep", cmd_grep, "grep <pola> [file]   cari baris yang cocok (regex: ^ $ . *)"},
-    {"exec", cmd_exec, "exec <nama>           jalankan program eksternal"},
+    {"exec", cmd_exec, "exec <nama> [arg...] jalankan program eksternal (argc/argv)"},
     {"ps", cmd_ps, "ps                    tampilkan daftar process"},
     {"kill", cmd_kill, "kill <pid>            hentikan process"},
     {"echo", cmd_echo, "echo <teks>          tulis teks (echo isi > file untuk membuat file)"},

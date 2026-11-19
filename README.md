@@ -12,7 +12,7 @@ Repository ini dibuat untuk memenuhi tugas besar mata kuliah IF2130 Sistem Opera
   <li>Filesystem</li>
   <li>User Mode, Shell</li>
   <li>Process, Scheduler, Multitasking</li>
-</ol>
+</ol>`
 
 ## Kontributor
 

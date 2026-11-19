@@ -23,10 +23,11 @@
  *  11  | FS ukuran file         | struct EXT2DriverRequest *   | int8_t *return code   | uint32_t *size
  *  12  | exit                   | return code main()           | -                     | -
  *  13  | waktu CMOS (RTC)       | struct CMOSTime *            | -                     | -
-*  15 | buat process (exec)    | struct EXT2DriverRequest *   | int32_t *return code  | struct ProcessArgs * (boleh 0)
+ *  15 | buat process (exec)    | struct EXT2DriverRequest *   | int32_t *return code  | struct ProcessArgs * (boleh 0)
  *  15 | buat process (exec)    | struct EXT2DriverRequest *   | int32_t *return code  | -
  *  16 | kill process           | pid                          | int8_t *hasil (1 ok)  | -
  *  17 | info process (ps)      | struct ProcessInfo * array   | kapasitas array       | uint32_t *jumlah
+  * 18 | tunggu process (wait) | pid.
  *
  * Warna: 4 bit bawah = huruf, 4 bit atas = background.
  * Return code FS mengikuti spesifikasi CRUD Chapter 2, ditambah -1 jika argumen syscall invalid.
@@ -49,8 +50,9 @@
 #define SYSCALL_GET_TIME            13
 #define SYSCALL_PUTS_AT             14
 #define SYSCALL_PROCESS_CREATE      15
-#define SYSCALL_PROCESS_KILL         16
+#define SYSCALL_PROCESS_KILL        16
 #define SYSCALL_PROCESS_INFO        17
+#define SYSCALL_PROCESS_WAIT        18
 
 /**
  * argc/argv untuk SYSCALL_PROCESS_CREATE (edx = struct ProcessArgs * milik user, 0 jika tanpa argumen).
@@ -62,6 +64,7 @@
 struct ProcessArgs {
     uint32_t argc;
     char   **argv;
+    uint32_t pid;   /* output: diisi kernel dengan PID process baru jika create berhasil */
 };
 
 #define PROCESS_INFO_NAME_LENGTH 32
@@ -74,6 +77,7 @@ struct ProcessInfo {
 #define SYSCALL_RESULT_NORMAL 0 // kembali ke process pemanggil
 #define SYSCALL_RESULT_RETURN_TO_KERNEL 1 // kembali ke kernel_setup()
 #define SYSCALL_RESULT_SWITCH_PROCESS 2 // pindah ke process lain
+#define SYSCALL_RESULT_YIELD_RETRY 3 // simpan context (eip mundur ke int 0x30), pindah process, syscall diulang nanti
 
 /* Helper untuk register edx SYSCALL_PUTS_AT: posisi & warna dikemas dalam 1 register */
 #define SYSCALL_PUTS_AT_POS(row, col, color) \

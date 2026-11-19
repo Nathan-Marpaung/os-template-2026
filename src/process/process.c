@@ -238,6 +238,14 @@ exit_cleanup:
     return retcode;
 }
 
+uint32_t process_get_last_created_pid(void) {
+    return process_manager_state.next_pid - 1;
+}
+
+bool process_is_alive(uint32_t pid) {
+    return process_find_by_pid(pid) != NULL;
+}
+
 bool process_destroy(uint32_t pid) {
     struct ProcessControlBlock *pcb = process_find_by_pid(pid);
     if (pcb == NULL) return false;

@@ -58,6 +58,18 @@ static void syscall_dispatch(struct InterruptFrame *frame) {
     else if (result == SYSCALL_RESULT_SWITCH_PROCESS) {
         scheduler_switch_to_next_process();
     }
+    else if (result == SYSCALL_RESULT_YIELD_RETRY) {
+        // Simpan context pemanggil dengan eip mundur 2 byte ("int 0x30" = CD 30),
+        // sehingga syscall diulang ketika process ini dijadwalkan lagi.
+        struct Context ctx = {
+            .cpu    = frame->cpu,
+            .eip    = frame->int_stack.eip - 2,
+            .eflags = frame->int_stack.eflags,
+            .page_directory_virtual_addr = paging_get_current_page_directory_addr(),
+        };
+        scheduler_save_context_to_current_running_pcb(ctx);
+        scheduler_switch_to_next_process();
+    }
 }
 
 void main_interrupt_handler(struct InterruptFrame frame) {

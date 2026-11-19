@@ -1350,7 +1350,11 @@ static void cmd_grep(struct CmdCtx *ctx)
 
 static void cmd_exec(struct CmdCtx *ctx)
 {
-    if (ctx->argc < 2 || ctx->argc - 1 > PROCESS_ARGV_MAX_COUNT)
+    /* "exec <prog> ... &" = jalan di background (shell tidak menunggu) */
+    bool background = ctx->argc >= 3 && str_eq(ctx->argv[ctx->argc - 1], "&");
+    int prog_argc = background ? ctx->argc - 1 : ctx->argc;
+
+    if (prog_argc < 2 || prog_argc - 1 > PROCESS_ARGV_MAX_COUNT)
     {
         print_error("exec", NULL, "Penggunaan: exec <nama program> [argumen...]");
         return;
@@ -1397,8 +1401,9 @@ static void cmd_exec(struct CmdCtx *ctx)
 
     /* argv[0] = nama program (argumen shell ke-1), sisanya argumen user */
     struct ProcessArgs proc_args = {
-        .argc = (uint32_t)(ctx->argc - 1),
+        .argc = (uint32_t)(prog_argc - 1),
         .argv = &ctx->argv[1],
+        .pid = 0,
     };
 
     /* Minta kernel membuat process baru */
@@ -1412,7 +1417,11 @@ static void cmd_exec(struct CmdCtx *ctx)
     );
     if (retcode == 0)
     {
-        ob_puts(ctx->out, "Process berhasil dibuat.\n");
+        /* Foreground: blok shell sampai process selesai (syscall wait) */
+        if (!background)
+        {
+            syscall(SYSCALL_PROCESS_WAIT, proc_args.pid, 0, 0);
+        }
     }
     else
     {

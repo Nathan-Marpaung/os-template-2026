@@ -246,6 +246,9 @@ uint32_t syscall_handler(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx)
             }
             else {
                 *retcode = process_create_user_process_args(*(struct EXT2DriverRequest *)ebx, &syscall_argv_blob);
+                if (*retcode == PROCESS_CREATE_SUCCESS) {
+                    ((struct ProcessArgs *)edx)->pid = process_get_last_created_pid();
+                }
             }
         }
         break;
@@ -270,6 +273,16 @@ uint32_t syscall_handler(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx)
             }
             break;
 
+        case SYSCALL_PROCESS_WAIT:
+        {
+            /* Blocking: selama pid masih hidup, yield dan ulangi syscall ini nanti */
+            struct ProcessControlBlock *current = process_get_current_running_pcb_pointer();
+            if (current != NULL && current->metadata.pid != ebx && process_is_alive(ebx)) {
+                return SYSCALL_RESULT_YIELD_RETRY;
+            }
+            break;
+        }
+        
         case SYSCALL_EXIT:
         {
             struct ProcessControlBlock *current = process_get_current_running_pcb_pointer();

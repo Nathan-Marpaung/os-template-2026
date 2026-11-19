@@ -108,6 +108,8 @@ struct ProcessControlBlock* process_get_current_running_pcb_pointer(void);
 int32_t process_create_user_process(struct EXT2DriverRequest request);
 int32_t process_create_user_process_args(struct EXT2DriverRequest request, const struct ProcessArgvBlob *args);
 int32_t process_create_user_process_args(struct EXT2DriverRequest request, const struct ProcessArgvBlob *args);
+uint32_t process_get_last_created_pid(void);
+bool process_is_alive(uint32_t pid);
 
 /**
  * Destroy process then release page directory and process control block

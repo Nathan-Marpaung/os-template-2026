@@ -9,9 +9,25 @@
 #define MAX_FILE_SIZE 8192u
 #define MAX_FIND_DEPTH 8u
 
+#define COLOR_BLACK         0x00
+#define COLOR_BLUE          0x01
+#define COLOR_GREEN         0x02
+#define COLOR_CYAN          0x03
+#define COLOR_RED           0x04
+#define COLOR_MAGENTA       0x05
+#define COLOR_ORANGE        0x06
+#define COLOR_LIGHT_GRAY    0x07
+#define COLOR_DARK_GRAY     0x08
+#define COLOR_LIGHT_BLUE    0x09
+#define COLOR_LIGHT_GREEN   0x0A
+#define COLOR_LIGHT_CYAN    0x0B
+#define COLOR_LIGHT_RED     0x0C
+#define COLOR_LIGHT_MAGENTA 0x0D
+#define COLOR_YELLOW        0x0E
+#define COLOR_WHITE         0x0F
+
 static uint32_t current_directory = 1u;
 static uint8_t directory_buffer[MAX_DIRECTORY_SIZE];
-static uint8_t lookup_buffer[MAX_DIRECTORY_SIZE];
 static uint8_t find_buffers[MAX_FIND_DEPTH][MAX_DIRECTORY_SIZE];
 static uint8_t file_buffer[MAX_FILE_SIZE];
 static char process_buffer[512];
@@ -103,26 +119,38 @@ static int32_t call_syscall(uint32_t number,
     return result;
 }
 
+static void print_char_color(char character, uint8_t color) {
+    call_syscall(SYS_PUTCHAR, (uint32_t)(uint8_t)character, (uint32_t)color, 0);
+}
+
+static void print_text_color(const char *text, uint8_t color) {
+    while (*text != '\0') {
+        print_char_color(*text++, color);
+    }
+}
+
 static void print_char(char character) {
-    call_syscall(SYS_PUTCHAR, (uint32_t)(uint8_t)character, 0x0Fu, 0);
+    print_char_color(character, COLOR_WHITE);
 }
 
 static void print_text(const char *text) {
-    while (*text != '\0') {
-        print_char(*text++);
-    }
+    print_text_color(text, COLOR_WHITE);
+}
+
+static void print_error(const char *text) {
+    print_text_color(text, COLOR_RED);
 }
 
 static void print_file_char(uint8_t character) {
     if (character == '\n' || character == '\r' || character == '\t' ||
         (character >= ' ' && character <= '~')) {
-        print_char((char)character);
+        print_char_color((char)character, COLOR_LIGHT_GRAY);
     } else {
-        print_char('.');
+        print_char_color('.', COLOR_DARK_GRAY);
     }
 }
 
-static void print_number(uint32_t number) {
+static void print_number_color(uint32_t number, uint8_t color) {
     char digits[11];
     uint32_t count = 0;
     do {
@@ -131,8 +159,16 @@ static void print_number(uint32_t number) {
     } while (number != 0 && count < sizeof(digits));
 
     while (count != 0) {
-        print_char(digits[--count]);
+        print_char_color(digits[--count], color);
     }
+}
+
+static void print_prompt(void) {
+    print_text_color("OSama", COLOR_GREEN);
+    print_text_color("@", COLOR_GREEN);
+    print_text_color("user", COLOR_GREEN);
+    print_text_color(":", COLOR_GREEN);
+    print_text_color("$ ", COLOR_WHITE);
 }
 
 static void read_line(char *buffer) {
@@ -157,8 +193,9 @@ static void read_line(char *buffer) {
         }
         if (character >= ' ' && character <= '~' &&
             index + 1u < MAX_INPUT_SIZE) {
-            buffer[index++] = character;
-            print_char(character);
+            buffer[index] = character;
+            index++;
+            print_char_color(character, COLOR_WHITE);
         }
     }
 }
@@ -219,12 +256,12 @@ static bool lookup_entry(uint32_t parent_inode,
                          uint32_t *inode,
                          uint8_t *file_type) {
     for (uint32_t i = 0; i < MAX_DIRECTORY_SIZE; i++) {
-        lookup_buffer[i] = 0;
+        directory_buffer[i] = 0;
     }
-    if (shell_read_directory(parent_inode, lookup_buffer) != 0) {
+    if (shell_read_directory(parent_inode, directory_buffer) != 0) {
         return false;
     }
-    return find_entry_in_buffer(lookup_buffer, name, inode, file_type);
+    return find_entry_in_buffer(directory_buffer, name, inode, file_type);
 }
 
 static bool resolve_directory_path(const char *path, uint32_t *inode) {
@@ -365,7 +402,7 @@ static void list_directory(uint32_t inode) {
         directory_buffer[i] = 0;
     }
     if (shell_read_directory(inode, directory_buffer) != 0) {
-        print_text("ls: cannot read directory\n");
+        print_error("ls: cannot read directory\n");
         return;
     }
 
@@ -379,7 +416,7 @@ static void list_directory(uint32_t inode) {
         if (entry->rec_len < sizeof(*entry) ||
             entry->rec_len > MAX_DIRECTORY_SIZE - offset ||
             entry->name_len > entry->rec_len - sizeof(*entry)) {
-            print_text("ls: invalid directory entry\n");
+            print_error("ls: invalid directory entry\n");
             return;
         }
         if (entry->inode != 0) {
@@ -387,11 +424,14 @@ static void list_directory(uint32_t inode) {
             if (!(entry->name_len == 1 && entry_name[0] == '.') &&
                 !(entry->name_len == 2 && entry_name[0] == '.' &&
                   entry_name[1] == '.')) {
+                uint8_t entry_color = (entry->file_type == EXT2_FT_DIR)
+                                          ? COLOR_BLUE
+                                          : COLOR_GREEN;
                 for (uint32_t i = 0; i < entry->name_len; i++) {
-                    print_char(entry_name[i]);
+                    print_char_color(entry_name[i], entry_color);
                 }
                 if (entry->file_type == EXT2_FT_DIR) {
-                    print_char('/');
+                    print_char_color('/', COLOR_BLUE);
                 }
                 print_char('\n');
             }
@@ -405,7 +445,7 @@ static void command_mkdir(const char *path) {
     char name[MAX_PATH_SIZE];
     if (!resolve_file_path(path, &parent_inode, name) ||
         text_length(name) == 0 || text_length(name) > 255u) {
-        print_text("mkdir: invalid path\n");
+        print_error("mkdir: invalid path\n");
         return;
     }
     struct EXT2DriverRequest request = {
@@ -417,7 +457,7 @@ static void command_mkdir(const char *path) {
         .is_directory = true,
     };
     if (call_syscall(SYS_WRITE, (uint32_t)&request, 0, 0) != 0) {
-        print_text("mkdir: failed\n");
+        print_error("mkdir: failed\n");
     }
 }
 
@@ -429,7 +469,7 @@ static void command_remove(const char *path, bool directory) {
     if (!resolve_file_path(path, &parent_inode, name) ||
         !lookup_entry(parent_inode, name, &inode, &file_type) ||
         ((file_type == EXT2_FT_DIR) != directory)) {
-        print_text(directory ? "rmdir: invalid directory\n" : "rm: invalid file\n");
+        print_error(directory ? "rmdir: invalid directory\n" : "rm: invalid file\n");
         return;
     }
 
@@ -442,8 +482,8 @@ static void command_remove(const char *path, bool directory) {
         .is_directory = directory,
     };
     if (call_syscall(SYS_DELETE, (uint32_t)&request, 0, 0) != 0) {
-        print_text(directory ? "rmdir: directory is not empty or delete failed\n"
-                             : "rm: delete failed\n");
+        print_error(directory ? "rmdir: directory is not empty or delete failed\n"
+                              : "rm: delete failed\n");
     }
 }
 
@@ -452,7 +492,7 @@ static void command_cat(const char *path) {
     uint32_t size;
     char name[MAX_PATH_SIZE];
     if (!read_file(path, &parent_inode, name, &size)) {
-        print_text("cat: cannot read file (maximum 8192 bytes)\n");
+        print_error("cat: cannot read file (maximum 8192 bytes)\n");
         return;
     }
     for (uint32_t i = 0; i < size; i++) {
@@ -468,7 +508,7 @@ static void command_copy(const char *source, const char *destination) {
     uint32_t size;
     char source_name[MAX_PATH_SIZE];
     if (!read_file(source, &source_parent, source_name, &size)) {
-        print_text("cp: cannot read source (maximum 8192 bytes)\n");
+        print_error("cp: cannot read source (maximum 8192 bytes)\n");
         return;
     }
 
@@ -476,7 +516,7 @@ static void command_copy(const char *source, const char *destination) {
     char destination_name[MAX_PATH_SIZE];
     if (!resolve_file_path(destination, &destination_parent, destination_name) ||
         !write_file(destination_parent, destination_name, file_buffer, size)) {
-        print_text("cp: cannot create destination\n");
+        print_error("cp: cannot create destination\n");
     }
 }
 
@@ -485,7 +525,7 @@ static void command_move(const char *source, const char *destination) {
     uint32_t size;
     char source_name[MAX_PATH_SIZE];
     if (!read_file(source, &source_parent, source_name, &size)) {
-        print_text("mv: cannot read source (files only, maximum 8192 bytes)\n");
+        print_error("mv: cannot read source (files only, maximum 8192 bytes)\n");
         return;
     }
 
@@ -493,7 +533,7 @@ static void command_move(const char *source, const char *destination) {
     char destination_name[MAX_PATH_SIZE];
     if (!resolve_file_path(destination, &destination_parent, destination_name) ||
         !write_file(destination_parent, destination_name, file_buffer, size)) {
-        print_text("mv: cannot create destination\n");
+        print_error("mv: cannot create destination\n");
         return;
     }
 
@@ -506,7 +546,7 @@ static void command_move(const char *source, const char *destination) {
         .is_directory = false,
     };
     if (call_syscall(SYS_DELETE, (uint32_t)&request, 0, 0) != 0) {
-        print_text("mv: destination created but source could not be deleted\n");
+        print_error("mv: destination created but source could not be deleted\n");
     }
 }
 
@@ -536,7 +576,7 @@ static void command_exec(const char *path) {
     char name[MAX_PATH_SIZE];
     if (!resolve_file_path(path, &parent_inode, name) ||
         !shell_get_file_size(parent_inode, name, &size) || size == 0) {
-        print_text("exec: cannot find executable\n");
+        print_error("exec: cannot find executable\n");
         return;
     }
     struct EXT2DriverRequest request = {
@@ -549,9 +589,9 @@ static void command_exec(const char *path) {
     };
     int32_t result = call_syscall(SYS_EXEC, (uint32_t)&request, 0, 0);
     if (result != 0) {
-        print_text("exec: process creation failed (");
-        print_number((uint32_t)result);
-        print_text(")\n");
+        print_error("exec: process creation failed (");
+        print_number_color((uint32_t)result, COLOR_RED);
+        print_error(")\n");
     }
 }
 
@@ -615,7 +655,10 @@ static void find_recursive(uint32_t inode,
 
                 if (pattern == NULL || text_contains(child_path, pattern) ||
                         text_contains(entry_name_buffer, pattern)) {
-                    print_text(child_path);
+                    print_text_color(
+                        child_path,
+                        (entry->file_type == EXT2_FT_DIR) ? COLOR_BLUE : COLOR_GREEN
+                    );
                     print_char('\n');
                 }
                 if (entry->file_type == EXT2_FT_DIR) {
@@ -632,7 +675,7 @@ static void command_grep(const char *pattern, const char *path) {
     uint32_t size;
     char name[MAX_PATH_SIZE];
     if (!read_file(path, &parent_inode, name, &size)) {
-        print_text("grep: cannot read file (maximum 8192 bytes)\n");
+        print_error("grep: cannot read file (maximum 8192 bytes)\n");
         return;
     }
 
@@ -655,24 +698,41 @@ static void command_grep(const char *pattern, const char *path) {
 }
 
 static void print_help(void) {
-    print_text("Commands:\n");
-    print_text("  help                    show this help\n");
-    print_text("  clear                   clear the screen\n");
-    print_text("  ls [path]               list a directory\n");
-    print_text("  cd [path]               change directory (default: /)\n");
-    print_text("  mkdir path              create a directory\n");
-    print_text("  rmdir path              remove an empty directory\n");
-    print_text("  cat file                print a file (up to 8192 bytes)\n");
-    print_text("  cp source destination   copy a file\n");
-    print_text("  mv source destination   move a file\n");
-    print_text("  rm file                 remove a file\n");
-    print_text("  find [path] [pattern]   search directory tree\n");
-    print_text("  grep pattern file       print matching lines\n");
-    print_text("  ps                      list processes\n");
-    print_text("  kill pid                terminate a process\n");
-    print_text("  exec file               run a flat binary\n");
-    print_text("  time                    show uptime in milliseconds\n");
-    print_text("  exit                    exit this process\n");
+    print_text_color("Commands:\n", COLOR_GREEN);
+    print_text_color("  help                    ", COLOR_WHITE);
+    print_text_color("show this help\n", COLOR_DARK_GRAY);
+    print_text_color("  clear                   ", COLOR_WHITE);
+    print_text_color("clear the screen\n", COLOR_DARK_GRAY);
+    print_text_color("  ls [path]               ", COLOR_WHITE);
+    print_text_color("list a directory\n", COLOR_DARK_GRAY);
+    print_text_color("  cd [path]               ", COLOR_WHITE);
+    print_text_color("change directory (default: /)\n", COLOR_DARK_GRAY);
+    print_text_color("  mkdir path              ", COLOR_WHITE);
+    print_text_color("create a directory\n", COLOR_DARK_GRAY);
+    print_text_color("  rmdir path              ", COLOR_WHITE);
+    print_text_color("remove an empty directory\n", COLOR_DARK_GRAY);
+    print_text_color("  cat file                ", COLOR_WHITE);
+    print_text_color("print a file (up to 8192 bytes)\n", COLOR_DARK_GRAY);
+    print_text_color("  cp source destination   ", COLOR_WHITE);
+    print_text_color("copy a file\n", COLOR_DARK_GRAY);
+    print_text_color("  mv source destination   ", COLOR_WHITE);
+    print_text_color("move a file\n", COLOR_DARK_GRAY);
+    print_text_color("  rm file                 ", COLOR_WHITE);
+    print_text_color("remove a file\n", COLOR_DARK_GRAY);
+    print_text_color("  find [path] [pattern]   ", COLOR_WHITE);
+    print_text_color("search directory tree\n", COLOR_DARK_GRAY);
+    print_text_color("  grep pattern file       ", COLOR_WHITE);
+    print_text_color("print matching lines\n", COLOR_DARK_GRAY);
+    print_text_color("  ps                      ", COLOR_WHITE);
+    print_text_color("list processes\n", COLOR_DARK_GRAY);
+    print_text_color("  kill pid                ", COLOR_WHITE);
+    print_text_color("terminate a process\n", COLOR_DARK_GRAY);
+    print_text_color("  exec file               ", COLOR_WHITE);
+    print_text_color("run a flat binary\n", COLOR_DARK_GRAY);
+    print_text_color("  time                    ", COLOR_WHITE);
+    print_text_color("show uptime in milliseconds\n", COLOR_DARK_GRAY);
+    print_text_color("  exit                    ", COLOR_WHITE);
+    print_text_color("exit this process\n", COLOR_DARK_GRAY);
 }
 
 static void parse_and_execute(char *line) {
@@ -688,7 +748,7 @@ static void parse_and_execute(char *line) {
             break;
         }
         if (argument_count == sizeof(arguments) / sizeof(arguments[0])) {
-            print_text("Too many arguments\n");
+            print_error("Too many arguments\n");
             return;
         }
         arguments[argument_count++] = &line[index];
@@ -709,7 +769,7 @@ static void parse_and_execute(char *line) {
         uint32_t inode = current_directory;
         if (argument_count > 1 &&
             !resolve_directory_path(arguments[1], &inode)) {
-            print_text("ls: directory not found\n");
+            print_error("ls: directory not found\n");
         } else {
             list_directory(inode);
         }
@@ -717,7 +777,7 @@ static void parse_and_execute(char *line) {
         if (argument_count == 1) {
             current_directory = 1u;
         } else if (!resolve_directory_path(arguments[1], &current_directory)) {
-            print_text("cd: directory not found\n");
+            print_error("cd: directory not found\n");
         }
     } else if (text_equal(command, "mkdir") && argument_count == 2) {
         command_mkdir(arguments[1]);
@@ -736,7 +796,7 @@ static void parse_and_execute(char *line) {
         const char *pattern = argument_count == 3 ? arguments[2] : NULL;
         uint32_t inode;
         if (!resolve_directory_path(path, &inode)) {
-            print_text("find: directory not found\n");
+            print_error("find: directory not found\n");
         } else {
             find_recursive(inode, path, pattern, 0);
         }
@@ -746,33 +806,33 @@ static void parse_and_execute(char *line) {
         process_buffer[0] = '\0';
         if (call_syscall(SYS_PS, (uint32_t)process_buffer,
                          sizeof(process_buffer), 0) == 0) {
-            print_text(process_buffer);
+            print_text_color(process_buffer, COLOR_LIGHT_GRAY);
         }
     } else if (text_equal(command, "kill") && argument_count == 2) {
         uint32_t pid;
         if (!parse_number(arguments[1], &pid) ||
             call_syscall(SYS_KILL, pid, 0, 0) != 0) {
-            print_text("kill: invalid or inactive PID\n");
+            print_error("kill: invalid or inactive PID\n");
         }
     } else if (text_equal(command, "exec") && argument_count == 2) {
         command_exec(arguments[1]);
     } else if (text_equal(command, "time") && argument_count == 1) {
-        print_text("Uptime: ");
-        print_number((uint32_t)call_syscall(SYS_GET_TIME, 0, 0, 0));
-        print_text(" ms\n");
+        print_text_color("Uptime: ", COLOR_DARK_GRAY);
+        print_number_color((uint32_t)call_syscall(SYS_GET_TIME, 0, 0, 0), COLOR_LIGHT_GRAY);
+        print_text_color(" ms\n", COLOR_DARK_GRAY);
     } else if (text_equal(command, "exit") && argument_count == 1) {
         call_syscall(SYS_EXIT, 0, 0, 0);
-        print_text("exit: could not terminate process\n");
+        print_error("exit: could not terminate process\n");
     } else {
-        print_text("Unknown command or invalid arguments. Type 'help'.\n");
+        print_error("Unknown command or invalid arguments. Type 'help'.\n");
     }
 }
 
 int main(void) {
-    print_text("Welcome to OSama\n");
+    print_text_color("Welcome to OSama\n", COLOR_BLUE);
     char input_buffer[MAX_INPUT_SIZE];
     while (true) {
-        print_text("OSama@user:$ ");
+        print_prompt();
         read_line(input_buffer);
         parse_and_execute(input_buffer);
     }

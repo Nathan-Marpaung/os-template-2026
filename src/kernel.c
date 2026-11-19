@@ -13,6 +13,7 @@
 #include "header/process/process.h"
 #include "header/scheduler/scheduler.h"
 #include "header/kernel-entrypoint.h"
+#include "header/cpu/portio.h"
 
 #if DISK_DRIVER_SELF_TEST || FS_SELF_TEST || SWAP_SELF_TEST
 static void framebuffer_write_text(
@@ -161,6 +162,25 @@ static bool fs_write_integrity_test(void) {
 }
 #endif
 
+static void color_palette(void) {
+    static const uint8_t entries[][4] = {
+        { 0, 7, 7, 11 },
+        { 1, 34, 45, 62 },
+        { 2, 41, 56, 40 },
+        { 4, 60, 34, 42 },
+        { 6, 62, 44, 33 },
+        { 7, 51, 53, 61 },
+        { 8, 27, 28, 33 },
+        { 15, 51, 53, 61 },
+    };
+    for (uint32_t i = 0; i < sizeof(entries) / sizeof(entries[0]); ++i) {
+        out(0x3C8, entries[i][0]);
+        out(0x3C9, entries[i][1]);
+        out(0x3C9, entries[i][2]);
+        out(0x3C9, entries[i][3]);
+    }
+}
+
 void kernel_setup(void) {
     initialize_gdt();
     pic_remap();
@@ -168,6 +188,7 @@ void kernel_setup(void) {
     activate_keyboard_interrupt();
     scheduler_init();
 
+    color_palette();
     framebuffer_clear();
     framebuffer_set_cursor(0, 0);
     initialize_filesystem_ext2();

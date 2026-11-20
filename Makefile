@@ -1,5 +1,4 @@
 .PHONY: run all build kernel iso disk clean user-shell inserter insert-hello user-hello insert-shell user-clock insert-clock user-args insert-args
-<<<<<<< HEAD
 
 CASE ?= 1
 
@@ -17,8 +16,6 @@ insert-crash: inserter user-crash
 	@echo Inserting crash$(CASE) into EXT2 filesystem...
 	@cd $(OUTPUT_FOLDER); ./inserter -f crash$(CASE) 1 storage.bin
 	
-=======
->>>>>>> origin/main
 # Compiler & linker
 LLVM_PREFIX   = $(shell brew --prefix llvm)
 LLD_PREFIX    = $(shell brew --prefix lld)

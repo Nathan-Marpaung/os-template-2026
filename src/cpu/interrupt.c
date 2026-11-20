@@ -4,11 +4,8 @@
 #include "header/syscall/syscall.h"
 #include "header/memory/swap.h"
 #include "header/cpu/portio.h"
-<<<<<<< HEAD
 #include "header/process/process.h"
-=======
 #include "header/process/scheduler.h"
->>>>>>> origin/main
 
 /* Didefinisikan di kernel-entrypoint.s: kembali ke kernel_setup() setelah SYSCALL_EXIT */
 extern void kernel_return_from_user(void) __attribute__((noreturn));
@@ -85,15 +82,12 @@ void main_interrupt_handler(struct InterruptFrame frame) {
         syscall_dispatch(&frame);
     } else if (int_number >= PIC1_OFFSET && int_number < PIC2_OFFSET + 8) {
         irq_handler(int_number - PIC1_OFFSET, &frame);
-<<<<<<< HEAD
     } else if (int_number < 32 && int_number != 2) {            // exception CPU selain page fault
         if ((frame.int_stack.cs & 0x3) == 0x3) {      
             struct ProcessControlBlock *pcb = process_get_current_running_pcb_pointer();
             if (pcb != NULL) process_destroy(pcb->metadata.pid);
             scheduler_switch_to_next_process();    
         }
-=======
->>>>>>> origin/main
     }
 }
 

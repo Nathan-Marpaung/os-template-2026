@@ -125,3 +125,8 @@ make run     # atau cukup: make
 | `help` | Menampilkan semua command |
 
 `Ctrl+C` di prompt membatalkan baris yang sedang diketik.
+
+| Tombol | Fungsi |
+|---|---|
+| `Tab` | Melengkapi nama command (kata pertama atau setelah `\|`) dan nama file/folder, termasuk path seperti `cat folder/da<Tab>`. Jika ada beberapa kandidat, dilengkapi sampai bagian yang sama lalu semua kandidat ditampilkan |
+| `↑` / `↓` | Menelusuri riwayat command (maksimal 16 command terakhir, command berulang tidak disimpan dua kali). `↓` sampai paling bawah mengembalikan baris yang sedang diketik |

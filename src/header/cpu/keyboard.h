@@ -10,6 +10,10 @@
 /* Karakter yang dikirim ke buffer ketika Ctrl+C ditekan (ASCII ETX) */
 #define KEYBOARD_CTRL_C 0x03
 
+/* Kode khusus panah atas/bawah di buffer keyboard (dipakai riwayat command shell) */
+#define KEYBOARD_KEY_UP   0x11
+#define KEYBOARD_KEY_DOWN 0x12
+
 extern volatile uint8_t keyboard_last_scancode;
 
 void keyboard_init(void);

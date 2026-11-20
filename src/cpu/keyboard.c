@@ -51,6 +51,8 @@ static const char scancode_to_ascii_shift[128] = {
 #define SC_CTRL_RELEASE        0x9D
 #define SC_KEY_C               0x2E
 #define SC_EXTENDED_PREFIX     0xE0
+#define SC_ARROW_UP            0x48 // didahului 0xE0
+#define SC_ARROW_DOWN          0x50 // didahului 0xE0
 
 volatile char keyboard_last_ascii = 0;
 volatile uint8_t keyboard_last_scancode = 0;
@@ -137,7 +139,7 @@ void keyboard_handler(void) {
     }
 
     if (extended) {
-        /* Hanya Enter, '/' keypad, dan Ctrl kanan yang dipakai, tombol extended lain diabaikan */
+        /* Enter, '/' keypad, Ctrl kanan, dan panah atas/bawah yang dipakai, tombol extended lain diabaikan */
         extended = false;
         if (scancode == SC_CTRL || scancode == SC_CTRL_RELEASE) {
             ctrl_pressed = scancode == SC_CTRL;
@@ -149,6 +151,10 @@ void keyboard_handler(void) {
             ext_char = '\n';
         } else if (scancode == 0x35) {
             ext_char = '/';
+        } else if (scancode == SC_ARROW_UP && keyboard_active) {
+            ext_char = KEYBOARD_KEY_UP;
+        } else if (scancode == SC_ARROW_DOWN && keyboard_active) {
+            ext_char = KEYBOARD_KEY_DOWN;
         }
         if (ext_char != 0) {
             keyboard_last_ascii = ext_char;

@@ -6,6 +6,7 @@
 #include "header/memory/swap.h"
 #include "header/disk.h"
 #include "header/text/framebuffer.h"
+#include "header/process/scheduler.h"
 
 #define KERNEL_VIRTUAL_BASE 0xC0000000u // alamat di atas ini semua miliki kernel
 #define PAGE_MASK (~(PAGE_FRAME_SIZE - 1)) // buang 12 bit bawah
@@ -223,6 +224,16 @@ void page_fault_handler(uint32_t fault_address, uint32_t error_code) {
         }
     }
 
+    if (error_code & 0x4) {   // fault dari ring 3: hentikan process itu saja
+        print_text(24, 0, "PROCESS KILLED: page fault addr=", 0xC);
+        print_hex(24, 32, fault_address, 0xC);
+
+        struct ProcessControlBlock *pcb = process_get_current_running_pcb_pointer();
+        if (pcb != NULL) process_destroy(pcb->metadata.pid);
+        scheduler_switch_to_next_process();  
+    }
+
+    // fault di ring 0 = bug kernel: tetap halt seperti sebelumnya
     print_text(24, 0, "PAGE FAULT addr=", 0xC);
     print_hex(24, 16, fault_address, 0xC);
     print_text(24, 27, "err=", 0xC);

@@ -1,4 +1,7 @@
-.PHONY: run all build kernel iso disk clean user-shell inserter insert-hello user-hello insert-shell user-clock insert-clock user-args insert-args
+.PHONY: run all build kernel iso disk clean user-shell inserter insert-hello user-hello insert-shell user-clock insert-clock user-args insert-args insert-all setup
+
+# Target default: "make" tanpa argumen langsung build + jalankan OS
+.DEFAULT_GOAL := run
 
 CASE ?= 1
 
@@ -183,3 +186,9 @@ user-args:
 insert-args: inserter user-args
 	@echo Inserting args-demo into EXT2 filesystem...
 	@cd $(OUTPUT_FOLDER); ./inserter -f args-demo 1 storage.bin
+
+# Masukkan semua user program (shell, hello, clock, args-demo) ke storage.bin
+insert-all: insert-shell insert-hello insert-clock insert-args
+
+# Setup pertama kali: disk baru + semua program, lalu build kernel
+setup: clean disk insert-all build

@@ -221,6 +221,14 @@ uint32_t syscall_handler(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx)
     case SYSCALL_PUTS_AT:
         if (ecx <= TERMINAL_WIDTH && user_range_ok(ebx, ecx))
         {
+            if ((edx & 0xFF) == TERMINAL_STATUS_ROW)
+            {
+                struct ProcessControlBlock *owner = process_get_current_running_pcb_pointer();
+                if (owner != NULL)
+                {
+                    terminal_set_status_line_owner(owner->metadata.pid);
+                }
+            }
             terminal_write_at(
                 (uint8_t)(edx & 0xFF),
                 (uint8_t)((edx >> 8) & 0xFF),
@@ -233,6 +241,8 @@ uint32_t syscall_handler(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx)
     case SYSCALL_PROCESS_CREATE:
     // ebx = request
     // ecx = *retcode
+        // Ctrl+C yang ditekan sebelum program ini dibuat tidak boleh langsung menghentikannya
+        keyboard_consume_interrupt_request();
         if (ecx != 0 && user_range_ok(ecx, sizeof(int32_t))) {
             int32_t *retcode = (int32_t *)ecx;
             if (!user_request_ok(ebx, false)) {
@@ -275,10 +285,21 @@ uint32_t syscall_handler(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx)
 
         case SYSCALL_PROCESS_WAIT:
         {
-            /* Blocking: selama pid masih hidup, yield dan ulangi syscall ini nanti */
+            /* Blocking: selama pid masih hidup, yield dan ulangi syscall ini nanti.
+             * ecx (opsional) = uint8_t * -> diisi 1 jika process dihentikan dengan Ctrl+C, 0 jika selesai sendiri */
             struct ProcessControlBlock *current = process_get_current_running_pcb_pointer();
+            bool interrupted = false;
             if (current != NULL && current->metadata.pid != ebx && process_is_alive(ebx)) {
-                return SYSCALL_RESULT_YIELD_RETRY;
+                if (!keyboard_consume_interrupt_request()) {
+                    return SYSCALL_RESULT_YIELD_RETRY;
+                }
+                // Ctrl+C: hentikan program foreground, buang ketikan yang tertahan selama program berjalan
+                process_destroy(ebx);
+                keyboard_flush_buffer();
+                interrupted = true;
+            }
+            if (ecx != 0 && user_range_ok(ecx, sizeof(uint8_t))) {
+                *(uint8_t *)ecx = interrupted ? 1 : 0;
             }
             break;
         }

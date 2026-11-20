@@ -18,7 +18,7 @@ Repository ini dibuat untuk memenuhi tugas besar mata kuliah IF2130 Sistem Opera
 
 | Nama | NIM | Bagian | Tanggung Jawab |
 |---|---|---|---|
-| Mulky | TODO | A | 4.1.0, 4.1.1, 4.3.3 (memori virtual, CMOS, clock) |
+| Mulky Siraj Firizqi | 13525069 | A | 4.1.0, 4.1.1, 4.3.3 (memori virtual, CMOS, clock) |
 | Fritz | TODO | B | 4.1.2, 4.1.3, 4.1.4, 4.3.2 (PCB, process creation, process init, syscall kernel) |
 | Juan | TODO | C | 4.2.1, 4.2.2, 4.2.3 (timer, Round Robin, context switch) |
 | Gie | TODO | D | 4.3.1, 4.3.2 (shell), 4.3.4, 4.3.7 (crt0, exec/ps/kill, Hello World, README) |
@@ -38,7 +38,9 @@ src/
 │   ├── pic.c
 │   └── portio.c
 ├── external/
+│   ├── args-demo.c
 │   ├── clock.c
+│   ├── crash.c
 │   ├── external-inserter.c
 │   └── hello-world.c
 ├── header/
@@ -84,27 +86,42 @@ Pastikan perangkat telah menginstal:
 1. Clone repository:
 
    ```bash
-   git clone <URL_REPOSITORY>
+   git clone https://github.com/Vinsju/uvuwevwe_OSas.git
    cd uvuwevwe_OSas
    ```
 
 ### Cara Setup Pertama Kali
-  1. make clean (bersihkan build sebelumnya)
-  2. make build (build kernel dan ISO)
-  3. make disk (buat disk image)
-  4. make insert-shell (masukkan Shell ke filesystem)
-  5. make insert-hello (masukkan program Hello World)
-  6. make insert-clock (masukkan program Clock)
-  7. make run (jalankan OS)
+
+```bash
+make setup   # disk baru + masukkan shell, hello, clock, args-demo + build kernel
+make run     # jalankan OS (atau cukup: make)
+```
+
+> `make setup` membuat ulang `bin/storage.bin`, jadi semua file di disk lama akan terhapus.
+
+Langkah manual yang setara:
+  1. `make clean` (bersihkan build sebelumnya)
+  2. `make disk` (buat disk image kosong)
+  3. `make insert-all` (masukkan shell, hello, clock, args-demo ke file system)
+  4. `make run` (build kernel + ISO lalu jalankan OS)
 
 ### Cara Run Virtual Machine QEMU
-  1. make run
+
+```bash
+make run     # atau cukup: make
+```
 
 ## Contoh Penggunaan Shell
 
 | Perintah | Fungsi |
 |---|---|
-| `exec hello` | Menjalankan program Hello World |
-| `exec clock` | Menjalankan jam sebagai process terpisah |
-| `ps` | Menampilkan daftar process aktif |
-| `kill <pid>` | Menghentikan process dengan PID tertentu |
+| `exec hello` | Menjalankan program Hello World (foreground) |
+| `exec args-demo satu dua` | Menjalankan program dengan argumen (argc/argv) |
+| `exec clock &` | Menjalankan jam di background, jam tampil di pojok kanan bawah dan shell tetap bisa dipakai |
+| `exec clock` lalu `Ctrl+C` | Program foreground ditunggu shell sampai selesai, `Ctrl+C` untuk menghentikannya |
+| `ps` | Menampilkan daftar process aktif (PID, nama, state) |
+| `kill <pid>` | Menghentikan process dengan PID tertentu (contoh: `kill 1`) |
+| `cd`, `ls`, `mkdir`, `cat`, `cp [-r]`, `rm [-r]`, `mv`, `find`, `grep` | Command file system, mendukung pipeline `\|` dan redirect `>` / `>>` |
+| `help` | Menampilkan semua command |
+
+`Ctrl+C` di prompt membatalkan baris yang sedang diketik.

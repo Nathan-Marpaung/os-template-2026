@@ -7,6 +7,9 @@
 #define KEYBOARD_DATA_PORT 0x60
 #define KEYBOARD_BUFFER_SIZE 256
 
+/* Karakter yang dikirim ke buffer ketika Ctrl+C ditekan (ASCII ETX) */
+#define KEYBOARD_CTRL_C 0x03
+
 extern volatile uint8_t keyboard_last_scancode;
 
 void keyboard_init(void);
@@ -28,5 +31,17 @@ bool keyboard_is_active(void);
  *            Enter = '\n', Backspace = '\b', Tab = '\t'.
  */
 void get_keyboard_buffer(char *buf);
+
+/**
+ * Ambil lalu reset permintaan Ctrl+C. Dipakai SYSCALL_PROCESS_WAIT untuk
+ * menghentikan program foreground yang sedang ditunggu shell.
+ * @return true jika Ctrl+C ditekan sejak pemanggilan terakhir
+ */
+bool keyboard_consume_interrupt_request(void);
+
+/**
+ * Buang semua karakter yang belum dibaca di ring buffer.
+ */
+void keyboard_flush_buffer(void);
 
 #endif

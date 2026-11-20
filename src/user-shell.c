@@ -1348,6 +1348,27 @@ static void cmd_grep(struct CmdCtx *ctx)
  * setelah API process creation dari Bagian B tersedia.
  */
 
+/* Ctrl+C dikirim keyboard driver sebagai ASCII ETX (sama dengan KEYBOARD_CTRL_C di kernel) */
+#define SHELL_KEY_CTRL_C 0x03
+
+/* Arti return code process_create_user_process() (PROCESS_CREATE_* di header/process/process.h) */
+static const char *process_create_error_text(int32_t retcode)
+{
+    switch (retcode)
+    {
+    case 1:
+        return "process penuh (maks 16), hentikan dengan kill";
+    case 2:
+        return "alamat entrypoint tidak valid";
+    case 3:
+        return "memori tidak cukup";
+    case 4:
+        return "program tidak bisa dibaca dari file system";
+    default:
+        return "argumen tidak valid";
+    }
+}
+
 static void cmd_exec(struct CmdCtx *ctx)
 {
     /* "exec <prog> ... &" = jalan di background (shell tidak menunggu) */
@@ -1420,12 +1441,19 @@ static void cmd_exec(struct CmdCtx *ctx)
         /* Foreground: blok shell sampai process selesai (syscall wait) */
         if (!background)
         {
-            syscall(SYSCALL_PROCESS_WAIT, proc_args.pid, 0, 0);
+            uint8_t interrupted = 0;
+            syscall(SYSCALL_PROCESS_WAIT, proc_args.pid, (uintptr_t)&interrupted, 0);
+            if (interrupted)
+            {
+                ob_puts(ctx->out, "^C\n");
+            }
         }
     }
     else
     {
-        ob_puts(ctx->out, "Gagal membuat process. Kode error: ");
+        ob_puts(ctx->out, "Gagal membuat process: ");
+        ob_puts(ctx->out, process_create_error_text(retcode));
+        ob_puts(ctx->out, " (kode ");
         /* Tampilkan kode error */
         char digits[12];
         uint32_t n = 0;
@@ -1448,7 +1476,7 @@ static void cmd_exec(struct CmdCtx *ctx)
             ob_putc(ctx->out, digits[--n]);
         }
 
-        ob_putc(ctx->out, '\n');
+        ob_puts(ctx->out, ")\n");
     }
 }
 
@@ -1622,7 +1650,7 @@ static const struct Command commands[] = {
     {"mv", cmd_mv, "mv <src> <dst>       pindah / ganti nama file atau folder"},
     {"find", cmd_find, "find <nama>          cari file/folder di seluruh file system"},
     {"grep", cmd_grep, "grep <pola> [file]   cari baris yang cocok (regex: ^ $ . *)"},
-    {"exec", cmd_exec, "exec <nama> [arg...] jalankan program eksternal (argc/argv)"},
+    {"exec", cmd_exec, "exec <nama> [arg..] [&]  jalankan program (& = background, Ctrl+C = stop)"},
     {"ps", cmd_ps, "ps                    tampilkan daftar process"},
     {"kill", cmd_kill, "kill <pid>            hentikan process"},
     {"echo", cmd_echo, "echo <teks>          tulis teks (echo isi > file untuk membuat file)"},
@@ -1927,6 +1955,13 @@ static uint32_t read_line(char *line)
         if (c == '\n')
         {
             sys_putc('\n', COLOR_TEXT);
+            break;
+        }
+        if (c == SHELL_KEY_CTRL_C)
+        {
+            /* Ctrl+C di prompt: batalkan baris yang sedang diketik */
+            print("^C\n", COLOR_TEXT);
+            len = 0;
             break;
         }
         if (c == '\b')

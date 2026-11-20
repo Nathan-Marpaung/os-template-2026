@@ -50,4 +50,15 @@ void terminal_get_cursor(uint8_t *row, uint8_t *col);
  */
 void terminal_write_at(uint8_t row, uint8_t col, const char *str, uint32_t count, uint8_t color);
 
+/**
+ * Catat process yang terakhir menulis ke status line (misalnya clock).
+ */
+void terminal_set_status_line_owner(uint32_t pid);
+
+/**
+ * Dipanggil ketika process berhenti: jika process itu pemilik status line,
+ * status line dikosongkan supaya jam lama tidak tertinggal di layar.
+ */
+void terminal_release_status_line(uint32_t pid);
+
 #endif

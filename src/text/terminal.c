@@ -129,3 +129,21 @@ void terminal_write_at(uint8_t row, uint8_t col, const char *str, uint32_t count
         framebuffer_write(row, (uint8_t)(col + i), c, color & 0x0F, (color >> 4) & 0x0F);
     }
 }
+
+static bool status_line_owned = false;
+static uint32_t status_line_owner_pid = 0;
+
+void terminal_set_status_line_owner(uint32_t pid)
+{
+    status_line_owned = true;
+    status_line_owner_pid = pid;
+}
+
+void terminal_release_status_line(uint32_t pid)
+{
+    if (status_line_owned && status_line_owner_pid == pid)
+    {
+        terminal_clear_row(TERMINAL_STATUS_ROW);
+        status_line_owned = false;
+    }
+}

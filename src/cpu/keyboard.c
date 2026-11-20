@@ -47,6 +47,9 @@ static const char scancode_to_ascii_shift[128] = {
 #define SC_LEFT_SHIFT_RELEASE  0xAA
 #define SC_RIGHT_SHIFT_RELEASE 0xB6
 #define SC_CAPS_LOCK           0x3A
+#define SC_CTRL                0x1D
+#define SC_CTRL_RELEASE        0x9D
+#define SC_KEY_C               0x2E
 #define SC_EXTENDED_PREFIX     0xE0
 
 volatile char keyboard_last_ascii = 0;
@@ -63,6 +66,10 @@ static volatile uint32_t keyboard_head = 0; // posisi baca
 static volatile uint32_t keyboard_tail = 0; // posisi tulis
 
 static bool shift_pressed = false;
+static bool ctrl_pressed = false;
+
+/* Ctrl+C: permintaan menghentikan program foreground (dibaca syscall PROCESS_WAIT) */
+static volatile bool keyboard_interrupt_requested = false;
 static bool caps_lock = false;
 static bool extended = false;
 
@@ -130,8 +137,13 @@ void keyboard_handler(void) {
     }
 
     if (extended) {
-        /* Hanya Enter & '/' keypad yang dipakai, tombol extended lain diabaikan */
+        /* Hanya Enter, '/' keypad, dan Ctrl kanan yang dipakai, tombol extended lain diabaikan */
         extended = false;
+        if (scancode == SC_CTRL || scancode == SC_CTRL_RELEASE) {
+            ctrl_pressed = scancode == SC_CTRL;
+            pic_send_eoi(1);
+            return;
+        }
         char ext_char = 0;
         if (scancode == 0x1C) {
             ext_char = '\n';
@@ -162,7 +174,21 @@ void keyboard_handler(void) {
     case SC_CAPS_LOCK:
         caps_lock = !caps_lock;
         break;
+    case SC_CTRL:
+        ctrl_pressed = true;
+        break;
+    case SC_CTRL_RELEASE:
+        ctrl_pressed = false;
+        break;
     default:
+        if (ctrl_pressed && keyboard_active && scancode < 128) {
+            /* Ctrl+C: tandai permintaan stop + kirim ETX (0x03) ke shell. Kombinasi Ctrl lain diabaikan */
+            if (scancode == SC_KEY_C) {
+                keyboard_interrupt_requested = true;
+                keyboard_buffer_push(KEYBOARD_CTRL_C);
+            }
+            break;
+        }
         if (scancode < 128) {
             char c = scancode_to_char(scancode);
             keyboard_last_ascii = c;
@@ -195,6 +221,16 @@ void keyboard_state_deactivate(void) {
 
 bool keyboard_is_active(void) {
     return keyboard_active;
+}
+
+bool keyboard_consume_interrupt_request(void) {
+    bool requested = keyboard_interrupt_requested;
+    keyboard_interrupt_requested = false;
+    return requested;
+}
+
+void keyboard_flush_buffer(void) {
+    keyboard_head = keyboard_tail;
 }
 
 void get_keyboard_buffer(char *buf) {

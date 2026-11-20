@@ -3,6 +3,7 @@
 #include "header/memory/swap.h"
 #include "header/stdlib/string.h"
 #include "header/cpu/gdt.h"
+#include "header/text/terminal.h"
 
 // DATA GLOBAL
 struct ProcessControlBlock _process_list[PROCESS_COUNT_MAX];
@@ -259,6 +260,9 @@ bool process_destroy(uint32_t pid) {
         paging_use_page_directory(&_paging_kernel_page_directory);   // cek nama di paging.h
     }
     paging_free_page_directory(dir);
+
+    // Hapus tulisan process ini di status line (misalnya jam dari clock)
+    terminal_release_status_line(pid);
 
     memset(pcb, 0, sizeof(struct ProcessControlBlock));
     process_manager_state.active_process_count--;

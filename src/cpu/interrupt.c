@@ -4,6 +4,7 @@
 #include "header/syscall/syscall.h"
 #include "header/memory/swap.h"
 #include "header/cpu/portio.h"
+#include "header/process/process.h"
 
 /* Didefinisikan di kernel-entrypoint.s: kembali ke kernel_setup() setelah SYSCALL_EXIT */
 extern void kernel_return_from_user(void) __attribute__((noreturn));
@@ -14,7 +15,7 @@ static inline uint32_t read_cr2(void) {
     return value;
 }
 
-static void irq_handler(uint32_t irq) {
+static void irq_handler(uint32_t irq, struct InterruptFrame *frame) {
     switch (irq) {
     case IRQ_KEYBOARD:
         keyboard_handler(); // keyboard_handler() sudah mengirim EOI sendiri
@@ -54,9 +55,14 @@ void main_interrupt_handler(struct InterruptFrame frame) {
     } else if (int_number == INT_SYSCALL) {
         syscall_dispatch(&frame);
     } else if (int_number >= PIC1_OFFSET && int_number < PIC2_OFFSET + 8) {
-        irq_handler(int_number - PIC1_OFFSET);
+        irq_handler(int_number - PIC1_OFFSET, &frame);
+    } else if (int_number < 32 && int_number != 2) {            // exception CPU selain page fault
+        if ((frame.int_stack.cs & 0x3) == 0x3) {      
+            struct ProcessControlBlock *pcb = process_get_current_running_pcb_pointer();
+            if (pcb != NULL) process_destroy(pcb->metadata.pid);
+            scheduler_switch_to_next_process();    
+        }
     }
-    // Exception CPU lain belum ditangani, perilaku sama dengan isr_default_handler lama
 }
 
 

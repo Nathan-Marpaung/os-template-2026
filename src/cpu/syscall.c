@@ -6,6 +6,8 @@
 #include "header/cpu/keyboard.h"
 #include "header/text/terminal.h"
 #include "header/cpu/cmos.h"
+#include "header/process/process.h"
+#include "header/memory/swap.h"
 
 /* Semua alamat milik user berada di bawah higher half kernel */
 #define USER_SPACE_END 0xC0000000u
@@ -47,6 +49,59 @@ static bool user_request_ok(uint32_t request_addr, bool check_buffer)
     return true;
 }
 
+/* Buffer statis: syscall dijalankan tanpa reentrancy, dan terlalu besar untuk stack ISR */
+static struct ProcessArgvBlob syscall_argv_blob;
+
+/* Salin argc/argv dari struct ProcessArgs milik user ke kernel dengan validasi penuh. */
+static bool copy_user_args(uint32_t args_addr, struct ProcessArgvBlob *blob)
+{
+    blob->argc = 0;
+    blob->data_len = 0;
+
+    if (args_addr == 0 || !user_range_ok(args_addr, sizeof(struct ProcessArgs)))
+    {
+        return false;
+    }
+    struct ProcessArgs *user_args = (struct ProcessArgs *)args_addr;
+    uint32_t argc = user_args->argc;
+    uint32_t argv_addr = (uint32_t)user_args->argv;
+
+    if (argc == 0 || argc > PROCESS_ARGV_MAX_COUNT)
+    {
+        return false;
+    }
+    if (argv_addr == 0 || !user_range_ok(argv_addr, argc * sizeof(char *)))
+    {
+        return false;
+    }
+
+    char **argv = (char **)argv_addr;
+    for (uint32_t i = 0; i < argc; i++)
+    {
+        uint32_t str = (uint32_t)argv[i];
+        if (str == 0)
+        {
+            return false;
+        }
+        blob->offset[i] = blob->data_len;
+        while (true)
+        {
+            if (str >= USER_SPACE_END || blob->data_len >= PROCESS_ARGV_MAX_BYTES)
+            {
+                return false;
+            }
+            char c = *(const char *)str++;
+            blob->data[blob->data_len++] = c;
+            if (c == '\0')
+            {
+                break;
+            }
+        }
+    }
+    blob->argc = argc;
+    return true;
+}
+
 static void syscall_fs(uint32_t service, uint32_t request_addr, uint32_t retcode_addr)
 {
     if (retcode_addr == 0 || !user_range_ok(retcode_addr, sizeof(int8_t)))
@@ -64,6 +119,15 @@ static void syscall_fs(uint32_t service, uint32_t request_addr, uint32_t retcode
     }
 
     struct EXT2DriverRequest *request = (struct EXT2DriverRequest *)request_addr;
+    if (check_buffer && request->buffer_size > 0) {
+        uint32_t size = request->buffer_size;
+        uint32_t file_size;
+        
+        if (service == SYSCALL_FS_READ && get_file_size(*request, &file_size) == 0 && file_size < size) {
+            size = file_size;
+        }
+        swap_prefault(request->buf, size);
+    }
     switch (service)
     {
     case SYSCALL_FS_READ:
@@ -166,8 +230,71 @@ uint32_t syscall_handler(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx)
         }
         break;
 
-    case SYSCALL_EXIT:
-        return 1; 
+    case SYSCALL_PROCESS_CREATE:
+    // ebx = request
+    // ecx = *retcode
+        if (ecx != 0 && user_range_ok(ecx, sizeof(int32_t))) {
+            int32_t *retcode = (int32_t *)ecx;
+            if (!user_request_ok(ebx, false)) {
+                *retcode = -1;
+            }
+            else if (edx == 0) {
+                *retcode = process_create_user_process_args(*(struct EXT2DriverRequest *)ebx, NULL);
+            }
+            else if (!copy_user_args(edx, &syscall_argv_blob)) {
+                *retcode = -1;
+            }
+            else {
+                *retcode = process_create_user_process_args(*(struct EXT2DriverRequest *)ebx, &syscall_argv_blob);
+                if (*retcode == PROCESS_CREATE_SUCCESS) {
+                    ((struct ProcessArgs *)edx)->pid = process_get_last_created_pid();
+                }
+            }
+        }
+        break;
+    
+        case SYSCALL_PROCESS_KILL:
+        {    
+            struct ProcessControlBlock *current = process_get_current_running_pcb_pointer();
+            bool kill_self = current != NULL && current->metadata.pid == ebx;
+            bool ok = process_destroy(ebx);
+            if (kill_self && ok) {
+                return SYSCALL_RESULT_SWITCH_PROCESS;
+            }
+            if (ecx != 0 && user_range_ok(ecx, sizeof(int8_t))) {
+                *(int8_t *)ecx = ok ? 1 : 0;
+            }
+            break;
+        }
+
+        case SYSCALL_PROCESS_INFO:
+            if (edx != 0 && user_range_ok(edx, sizeof(uint32_t)) && ecx <= PROCESS_COUNT_MAX && user_range_ok(ebx, ecx * sizeof(struct ProcessInfo))) {
+                *(uint32_t *)edx = process_get_info((struct ProcessInfo *)ebx, ecx);
+            }
+            break;
+
+        case SYSCALL_PROCESS_WAIT:
+        {
+            /* Blocking: selama pid masih hidup, yield dan ulangi syscall ini nanti */
+            struct ProcessControlBlock *current = process_get_current_running_pcb_pointer();
+            if (current != NULL && current->metadata.pid != ebx && process_is_alive(ebx)) {
+                return SYSCALL_RESULT_YIELD_RETRY;
+            }
+            break;
+        }
+        
+        case SYSCALL_EXIT:
+        {
+            struct ProcessControlBlock *current = process_get_current_running_pcb_pointer();
+
+            if (current != NULL) {
+                process_destroy(current->metadata.pid);
+
+            }
+
+            return SYSCALL_RESULT_SWITCH_PROCESS;
+        }
+
 
     default:
         break;

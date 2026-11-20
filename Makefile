@@ -1,4 +1,5 @@
 .PHONY: run all build kernel iso disk clean user-shell inserter insert-hello user-hello insert-shell user-clock insert-clock user-args insert-args
+<<<<<<< HEAD
 
 CASE ?= 1
 
@@ -16,6 +17,8 @@ insert-crash: inserter user-crash
 	@echo Inserting crash$(CASE) into EXT2 filesystem...
 	@cd $(OUTPUT_FOLDER); ./inserter -f crash$(CASE) 1 storage.bin
 	
+=======
+>>>>>>> origin/main
 # Compiler & linker
 LLVM_PREFIX   = $(shell brew --prefix llvm)
 LLD_PREFIX    = $(shell brew --prefix lld)
@@ -170,3 +173,16 @@ insert-clock: inserter user-clock
 insert-shell: inserter user-shell
 	@echo Inserting Shell into EXT2 filesystem...
 	@cd $(OUTPUT_FOLDER); ./inserter -f shell 1 storage.bin
+
+user-args:
+	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
+	@$(CC) $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/external/args-demo.c -o args-demo.o
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 --oformat=binary \
+		crt0.o args-demo.o -o $(OUTPUT_FOLDER)/args-demo
+	@echo Linking args-demo and generating flat binary...
+	@wc -c $(OUTPUT_FOLDER)/args-demo
+	@rm -f *.o
+
+insert-args: inserter user-args
+	@echo Inserting args-demo into EXT2 filesystem...
+	@cd $(OUTPUT_FOLDER); ./inserter -f args-demo 1 storage.bin

@@ -8,12 +8,16 @@
 #include "header/cpu/interrupt.h"
 #include "header/memory/paging.h"
 #include "header/filesystem/ext2.h"
+#include "header/syscall/syscall.h"
+
 
 #define PROCESS_NAME_LENGTH_MAX          32
-#define PROCESS_PAGE_FRAME_COUNT_MAX     8
+#define PROCESS_PAGE_FRAME_COUNT_MAX     32
 #define PROCESS_COUNT_MAX                16
 
 #define KERNEL_VIRTUAL_ADDRESS_BASE      0xC0000000
+#define PROCESS_USER_STACK_PAGE          0xBFFFF000
+#define PROCESS_USER_STACK_TOP           0xBFFFFFFC
 
 #define CPU_EFLAGS_BASE_FLAG               0x2
 #define CPU_EFLAGS_FLAG_CARRY              0x1
@@ -74,6 +78,13 @@ struct ProcessControlBlock {
 
 extern struct ProcessControlBlock _process_list[PROCESS_COUNT_MAX];
 
+struct ProcessArgvBlob {
+    uint32_t argc;
+    uint32_t data_len;
+    uint32_t offset[PROCESS_ARGV_MAX_COUNT];
+    char     data[PROCESS_ARGV_MAX_BYTES];
+};
+
 struct ProcessManagerState {
     uint32_t active_process_count;
     uint32_t next_pid;
@@ -95,6 +106,10 @@ struct ProcessControlBlock* process_get_current_running_pcb_pointer(void);
  * @return        Process creation return code
  */
 int32_t process_create_user_process(struct EXT2DriverRequest request);
+int32_t process_create_user_process_args(struct EXT2DriverRequest request, const struct ProcessArgvBlob *args);
+int32_t process_create_user_process_args(struct EXT2DriverRequest request, const struct ProcessArgvBlob *args);
+uint32_t process_get_last_created_pid(void);
+bool process_is_alive(uint32_t pid);
 
 /**
  * Destroy process then release page directory and process control block
@@ -104,4 +119,12 @@ int32_t process_create_user_process(struct EXT2DriverRequest request);
  */
 bool process_destroy(uint32_t pid);
 
+/**
+ * Salin info semua process yang aktif (dipakai syscall ps)
+ *
+ * @param info      Array tujuan (memori kernel atau user yang sudah divalidasi)
+ * @param max_count Kapasitas array info
+ * @return          Jumlah entri yang ditulis
+ */
+uint32_t process_get_info(struct ProcessInfo *info, uint32_t max_count);
 #endif

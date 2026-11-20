@@ -1,4 +1,21 @@
-.PHONY: run all build kernel iso disk clean user-shell inserter insert-hello user-hello insert-shell user-clock insert-clock
+.PHONY: run all build kernel iso disk clean user-shell inserter insert-hello user-hello insert-shell user-clock insert-clock user-args insert-args
+
+CASE ?= 1
+
+# Program uji crash: make insert-crash CASE=1..5, dijalankan dengan exec crash<CASE>
+user-crash:
+	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
+	@$(CC) $(CFLAGS) -DCRASH_CASE=$(CASE) -fno-pie $(SOURCE_FOLDER)/external/crash.c -o crash.o
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 --oformat=binary \
+		crt0.o crash.o -o $(OUTPUT_FOLDER)/crash$(CASE)
+	@echo Linking crash$(CASE) and generating flat binary...
+	@wc -c $(OUTPUT_FOLDER)/crash$(CASE)
+	@rm -f *.o
+
+insert-crash: inserter user-crash
+	@echo Inserting crash$(CASE) into EXT2 filesystem...
+	@cd $(OUTPUT_FOLDER); ./inserter -f crash$(CASE) 1 storage.bin
+	
 # Compiler & linker
 LLVM_PREFIX   = $(shell brew --prefix llvm)
 LLD_PREFIX    = $(shell brew --prefix lld)

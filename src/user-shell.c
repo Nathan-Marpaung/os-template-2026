@@ -1670,6 +1670,7 @@ static void cmd_help(struct CmdCtx *ctx)
         ob_puts(ctx->out, commands[i].usage);
         ob_putc(ctx->out, '\n');
     }
+    ob_puts(ctx->out, "Tombol: Tab = autocomplete command/file, panah atas/bawah = riwayat command\n");
 }
 
 /* ============================== PARSER & PIPELINE ============================== */
@@ -1942,9 +1943,268 @@ static void print_prompt(void)
     print("$ ", COLOR_TEXT);
 }
 
+/* ============================== RIWAYAT COMMAND (↑/↓) ============================== */
+
+#define SHELL_KEY_UP      0x11 /* sama dengan KEYBOARD_KEY_UP di driver keyboard */
+#define SHELL_KEY_DOWN    0x12 /* sama dengan KEYBOARD_KEY_DOWN */
+#define SHELL_HISTORY_MAX 16
+
+/* Ring buffer: history_lines[(history_start + i) % MAX] untuk i = 0 (paling lama) .. count-1 (terbaru) */
+static char history_lines[SHELL_HISTORY_MAX][SHELL_LINE_MAX];
+static uint32_t history_start = 0;
+static uint32_t history_count = 0;
+
+static char *history_get(uint32_t i)
+{
+    return history_lines[(history_start + i) % SHELL_HISTORY_MAX];
+}
+
+static void history_add(const char *line, uint32_t len)
+{
+    if (len == 0)
+    {
+        return;
+    }
+    /* Jangan simpan command yang sama dengan command terakhir (seperti bash ignoredups) */
+    if (history_count > 0 && str_eq(history_get(history_count - 1), line))
+    {
+        return;
+    }
+    char *slot;
+    if (history_count < SHELL_HISTORY_MAX)
+    {
+        slot = history_get(history_count);
+        history_count++;
+    }
+    else
+    {
+        /* Penuh: timpa yang paling lama */
+        slot = history_lines[history_start];
+        history_start = (history_start + 1) % SHELL_HISTORY_MAX;
+    }
+    for (uint32_t i = 0; i <= len; i++)
+    {
+        slot[i] = line[i];
+    }
+}
+
+/* Hapus isi baris di layar lalu tampilkan teks baru, panjang baris dikembalikan */
+static uint32_t line_replace(char *line, uint32_t len, const char *text)
+{
+    while (len > 0)
+    {
+        sys_putc('\b', COLOR_TEXT);
+        len--;
+    }
+    while (text[len] != '\0' && len < SHELL_LINE_MAX - 1)
+    {
+        line[len] = text[len];
+        len++;
+    }
+    line[len] = '\0';
+    sys_puts(line, len, COLOR_TEXT);
+    return len;
+}
+
+/* ============================== TAB AUTOCOMPLETE ============================== */
+
+#define SHELL_COMPLETE_MAX 32
+
+struct Completion
+{
+    const char *names[SHELL_COMPLETE_MAX];
+    uint8_t name_lens[SHELL_COMPLETE_MAX];
+    bool is_dir[SHELL_COMPLETE_MAX];
+    uint32_t count;
+};
+
+static bool starts_with(const char *s, uint32_t s_len, const char *prefix, uint32_t prefix_len)
+{
+    if (s_len < prefix_len)
+    {
+        return false;
+    }
+    for (uint32_t i = 0; i < prefix_len; i++)
+    {
+        if (s[i] != prefix[i])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void completion_add(struct Completion *c, const char *name, uint32_t len, bool is_dir)
+{
+    if (c->count < SHELL_COMPLETE_MAX)
+    {
+        c->names[c->count] = name;
+        c->name_lens[c->count] = (uint8_t)len;
+        c->is_dir[c->count] = is_dir;
+        c->count++;
+    }
+}
+
+/* Panjang prefix yang sama dari semua kandidat */
+static uint32_t completion_common_len(const struct Completion *c)
+{
+    uint32_t common = c->name_lens[0];
+    for (uint32_t i = 1; i < c->count; i++)
+    {
+        uint32_t j = 0;
+        while (j < common && j < c->name_lens[i] && c->names[i][j] == c->names[0][j])
+        {
+            j++;
+        }
+        common = j;
+    }
+    return common;
+}
+
+static void completion_print(const struct Completion *c)
+{
+    sys_putc('\n', COLOR_TEXT);
+    for (uint32_t i = 0; i < c->count; i++)
+    {
+        sys_puts(c->names[i], c->name_lens[i], c->is_dir[i] ? COLOR_DIR : COLOR_TEXT);
+        if (c->is_dir[i])
+        {
+            sys_putc('/', COLOR_DIR);
+        }
+        sys_puts("  ", 2, COLOR_TEXT);
+    }
+    sys_putc('\n', COLOR_TEXT);
+}
+
+/*
+ * Tab ditekan: lengkapi kata terakhir di line.
+ * - Kata pertama (atau kata pertama setelah '|') dilengkapi dengan nama command
+ * - Kata lain dilengkapi dengan nama file/folder, boleh berupa path (contoh: cat folder/fi<Tab>)
+ * Satu kandidat -> dilengkapi penuh ('/' untuk folder, spasi untuk file/command).
+ * Banyak kandidat -> dilengkapi sampai prefix yang sama, jika tidak bertambah tampilkan semua kandidat.
+ */
+static uint32_t autocomplete(char *line, uint32_t len)
+{
+    /* Cari awal kata terakhir dan apakah kata itu posisi command */
+    uint32_t word_start = len;
+    while (word_start > 0 && line[word_start - 1] != ' ' && line[word_start - 1] != '|' &&
+           line[word_start - 1] != '>')
+    {
+        word_start--;
+    }
+    uint32_t k = word_start;
+    while (k > 0 && line[k - 1] == ' ')
+    {
+        k--;
+    }
+    bool command_position = k == 0 || line[k - 1] == '|';
+
+    const char *word = line + word_start;
+    uint32_t word_len = len - word_start;
+
+    struct Completion comp;
+    comp.count = 0;
+    uint32_t prefix_start = word_start; /* posisi awal bagian yang dicocokkan */
+    static uint8_t dir_buf[SHELL_DIR_BUF_SIZE];
+
+    if (command_position)
+    {
+        for (uint32_t i = 0; i < COMMAND_COUNT; i++)
+        {
+            uint32_t name_len = str_len(commands[i].name);
+            if (starts_with(commands[i].name, name_len, word, word_len))
+            {
+                completion_add(&comp, commands[i].name, name_len, false);
+            }
+        }
+    }
+    else
+    {
+        /* Pisahkan "folder/prefix": folder di-resolve relatif ke cwd */
+        uint32_t slash = word_len;
+        while (slash > 0 && word[slash - 1] != '/')
+        {
+            slash--;
+        }
+        uint32_t dir = cwd_inode(&cwd);
+        if (slash > 0)
+        {
+            char dir_path[SHELL_LINE_MAX];
+            for (uint32_t i = 0; i < slash; i++)
+            {
+                dir_path[i] = word[i];
+            }
+            dir_path[slash] = '\0';
+            struct Cwd tmp;
+            if (resolve_dir(dir_path, &tmp) != NULL)
+            {
+                return len; /* folder tidak ada, tidak ada yang bisa dilengkapi */
+            }
+            dir = cwd_inode(&tmp);
+        }
+        prefix_start = word_start + slash;
+        word = line + prefix_start;
+        word_len = len - prefix_start;
+
+        if (fs_read_dir_inode(dir, dir_buf) != 0)
+        {
+            return len;
+        }
+        struct DirIter it;
+        dir_iter_init(&it, dir_buf);
+        struct EXT2DirectoryEntry *entry;
+        while ((entry = dir_iter_next(&it)) != NULL)
+        {
+            if (entry_is_dot(entry))
+            {
+                continue;
+            }
+            if (starts_with(entry_name(entry), entry->name_len, word, word_len))
+            {
+                completion_add(&comp, entry_name(entry), entry->name_len,
+                               entry->file_type == EXT2_FT_DIR);
+            }
+        }
+    }
+
+    if (comp.count == 0)
+    {
+        return len;
+    }
+
+    uint32_t target_len = comp.count == 1 ? comp.name_lens[0] : completion_common_len(&comp);
+    /* Tambahkan karakter yang kurang */
+    for (uint32_t i = word_len; i < target_len && len < SHELL_LINE_MAX - 1; i++)
+    {
+        line[len++] = comp.names[0][i];
+        sys_putc(comp.names[0][i], COLOR_TEXT);
+    }
+    if (comp.count == 1)
+    {
+        char suffix = comp.is_dir[0] ? '/' : ' ';
+        if (len < SHELL_LINE_MAX - 1)
+        {
+            line[len++] = suffix;
+            sys_putc(suffix, COLOR_TEXT);
+        }
+    }
+    else if (target_len == word_len)
+    {
+        /* Tidak bisa dilengkapi lagi: tampilkan pilihan, lalu tulis ulang prompt + baris */
+        completion_print(&comp);
+        print_prompt();
+        sys_puts(line, len, COLOR_TEXT);
+    }
+    line[len] = '\0';
+    return len;
+}
+
 static uint32_t read_line(char *line)
 {
+    static char draft[SHELL_LINE_MAX]; /* baris yang sedang diketik sebelum menelusuri riwayat */
     uint32_t len = 0;
+    uint32_t history_pos = history_count; /* == history_count berarti sedang di baris baru */
+    line[0] = '\0';
     while (true)
     {
         char c = sys_getchar();
@@ -1964,6 +2224,33 @@ static uint32_t read_line(char *line)
             len = 0;
             break;
         }
+        if (c == SHELL_KEY_UP)
+        {
+            if (history_pos > 0)
+            {
+                if (history_pos == history_count)
+                {
+                    line[len] = '\0';
+                    for (uint32_t i = 0; i <= len; i++)
+                    {
+                        draft[i] = line[i];
+                    }
+                }
+                history_pos--;
+                len = line_replace(line, len, history_get(history_pos));
+            }
+            continue;
+        }
+        if (c == SHELL_KEY_DOWN)
+        {
+            if (history_pos < history_count)
+            {
+                history_pos++;
+                len = line_replace(line, len,
+                                   history_pos == history_count ? draft : history_get(history_pos));
+            }
+            continue;
+        }
         if (c == '\b')
         {
             if (len > 0)
@@ -1975,7 +2262,9 @@ static uint32_t read_line(char *line)
         }
         if (c == '\t')
         {
-            c = ' ';
+            line[len] = '\0';
+            len = autocomplete(line, len);
+            continue;
         }
         if (c >= ' ' && c <= '~' && len < SHELL_LINE_MAX - 1)
         {
@@ -1984,6 +2273,7 @@ static uint32_t read_line(char *line)
         }
     }
     line[len] = '\0';
+    history_add(line, len);
     return len;
 }
 

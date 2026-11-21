@@ -5,6 +5,8 @@
 #include "header/cpu/gdt.h"
 #include "header/filesystem/ext2.h"
 #include "header/text/framebuffer.h"
+#include "header/memory/paging.h"
+#include "header/scheduler/scheduler.h"
 #include <stdint.h>
 
 void io_wait(void) {
@@ -94,6 +96,22 @@ void syscall(struct InterruptFrame frame) {
 
 void main_interrupt_handler(struct InterruptFrame frame) {
     switch (frame.int_number) {
+        case PIC1_OFFSET + IRQ_TIMER: {
+            if ((frame.int_stack.cs & 0x3) != 0x3) {
+                pic_ack(IRQ_TIMER);
+                break;
+            }
+
+            struct Context ctx = {
+                .cpu                         = frame.cpu,
+                .eip                         = frame.int_stack.eip,
+                .eflags                      = frame.int_stack.eflags,
+                .page_directory_virtual_addr = paging_get_current_page_directory_addr(),
+            };
+            scheduler_save_context_to_current_running_pcb(ctx);
+            pic_ack(IRQ_TIMER);
+            scheduler_switch_to_next_process();
+        }
         case PIC1_OFFSET + IRQ_KEYBOARD:
             keyboard_isr();
             break;

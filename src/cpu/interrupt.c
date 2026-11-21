@@ -6,6 +6,7 @@
 #include "header/cpu/portio.h"
 #include "header/process/process.h"
 #include "header/process/scheduler.h"
+#include "header/cpu/speaker.h"
 
 /* Didefinisikan di kernel-entrypoint.s: kembali ke kernel_setup() setelah SYSCALL_EXIT */
 extern void kernel_return_from_user(void) __attribute__((noreturn));
@@ -26,6 +27,7 @@ static void irq_handler(uint32_t irq, struct InterruptFrame *frame) {
         // Bagian 4.2 (Scheduler): context saving & context switch dilakukan di sini.
         // Untuk sekarang cukup ACK supaya interrupt lain tidak terblokir.
         pic_send_eoi(IRQ_TIMER);
+        speaker_tick();
         if ((frame->int_stack.cs & 0x3) == 0x3) {
             struct Context ctx = {
                 .cpu    = frame->cpu,

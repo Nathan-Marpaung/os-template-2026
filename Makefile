@@ -3,6 +3,19 @@
 # Target default: "make" tanpa argumen langsung build + jalankan OS
 .DEFAULT_GOAL := run
 
+user-beep:
+	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
+	@$(CC) $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/external/beep.c -o beep.o
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 --oformat=binary \
+		crt0.o beep.o -o $(OUTPUT_FOLDER)/beep
+	@echo Linking beep and generating flat binary...
+	@wc -c $(OUTPUT_FOLDER)/beep
+	@rm -f *.o
+
+insert-beep: inserter user-beep
+	@echo Inserting beep into EXT2 filesystem...
+	@cd $(OUTPUT_FOLDER); ./inserter -f beep 1 storage.bin
+
 CASE ?= 1
 
 # Program uji crash: make insert-crash CASE=1..5, dijalankan dengan exec crash<CASE>
@@ -43,10 +56,12 @@ CFLAGS        = $(DEBUG_CFLAG) $(WARNING_CFLAG) $(STRIP_CFLAG) $(ARCH_CFLAG) -c 
 AFLAGS        = -f elf32 -g -F dwarf
 LFLAGS        = -T $(SOURCE_FOLDER)/linker.ld -melf_i386
 
+QEMU_AUDIO ?= -audiodev coreaudio,id=snd0 -machine pcspk-audiodev=snd0
 
 run: all
 	@qemu-system-i386 \
 		-rtc base=localtime \
+		$(QEMU_AUDIO) \
 		-cdrom $(OUTPUT_FOLDER)/$(ISO_NAME).iso \
 		-drive file=$(DISK_IMAGE),format=raw
 all: build
@@ -67,6 +82,7 @@ kernel:
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/cpu/isr.c -o $(OUTPUT_FOLDER)/isr.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/cpu/interrupt.c -o $(OUTPUT_FOLDER)/interrupt.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/cpu/keyboard.c -o $(OUTPUT_FOLDER)/keyboard.o
+	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/cpu/speaker.c -o $(OUTPUT_FOLDER)/speaker.o 
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/framebuffer.c -o $(OUTPUT_FOLDER)/framebuffer.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/cpu/portio.c -o $(OUTPUT_FOLDER)/portio.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/disk.c -o $(OUTPUT_FOLDER)/disk.o

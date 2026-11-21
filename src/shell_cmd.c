@@ -603,7 +603,140 @@ void cmd_find(int argc, char **argv, struct ShellIO *io) {
     io->output_len = st.out_len;
 }
 
+// PROCESS MANAGEMENT COMMANDS (exec, ps, kill)
+static void proc_append_str(struct ShellIO *io, int *out_idx, const char *s) {
+    while (*s != '\0' && *out_idx < MAX_IO_BUFFER - 1) {
+        io->output_buffer[(*out_idx)++] = *s++;
+    }
+}
 
-// Code Atim taro bawah yeah
+static void proc_uint32_to_str(uint32_t val, char *buf) {
+    char tmp[12];
+    int len = 0;
+    if (val == 0) {
+        buf[0] = '0';
+        buf[1] = '\0';
+        return;
+    }
+    while (val > 0) {
+        tmp[len++] = (char) ('0' + (val % 10));
+        val /= 10;
+    }
+    for (int i = 0; i < len; i++) {
+        buf[i] = tmp[len - 1 - i];
+    }
+    buf[len] = '\0';
+}
 
+static bool proc_parse_uint32(const char *s, uint32_t *out) {
+    if (s == NULL || s[0] == '\0') return false;
+    uint32_t val = 0;
+    for (int i = 0; s[i] != '\0'; i++) {
+        if (s[i] < '0' || s[i] > '9') return false;
+        val = val * 10 + (uint32_t) (s[i] - '0');
+    }
+    *out = val;
+    return true;
+}
+
+void cmd_exec(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
+    if (argc < 2) {
+        const char *usage = "exec: Penggunaan: exec <nama_program>\n";
+        memcpy(io->output_buffer, usage, strlen(usage));
+        io->output_len = (int) strlen(usage);
+        return;
+    }
+
+    char *target = argv[1];
+    if (target[0] == '.' && target[1] == '/' && target[2] != '\0') {
+        target += 2;
+    }
+
+    struct EXT2DriverRequest req = {
+        .buf          = (void*) 0x0,
+        .name         = target,
+        .name_len     = (uint8_t) strlen(target),
+        .parent_inode = cwd,
+        .buffer_size  = 0x40000, 
+        .is_directory = false
+    };
+
+    int32_t retcode = -1;
+    syscall(SYSCALL_EXEC, (uint32_t) &req, (uint32_t) &retcode, 0);
+
+    if (retcode == 4 && cwd != 1) {
+        req.parent_inode = 1;
+        syscall(SYSCALL_EXEC, (uint32_t) &req, (uint32_t) &retcode, 0);
+    }
+
+    if (retcode != 0) {
+        const char *err = "exec: Gagal menjalankan program\n";
+        if (retcode == 1)      err = "exec: Batas maksimum proses tercapai\n";
+        else if (retcode == 2) err = "exec: Entrypoint tidak valid\n";
+        else if (retcode == 3) err = "exec: Memori tidak cukup\n";
+        else if (retcode == 4) err = "exec: Program tidak ditemukan\n";
+        memcpy(io->output_buffer, err, strlen(err));
+        io->output_len = (int) strlen(err);
+    }
+}
+
+void cmd_ps(int argc, char **argv, struct ShellIO *io) {
+    (void) argc;
+    (void) argv;
+
+    struct ProcessInfo list[16];
+    uint32_t count = 0;
+    syscall(SYSCALL_PS, (uint32_t) list, 16, (uint32_t) &count);
+
+    int out_idx = 0;
+    proc_append_str(io, &out_idx, "PID   STATE    NAME\n");
+
+    char pid_str[12];
+    for (uint32_t i = 0; i < count; i++) {
+        proc_uint32_to_str(list[i].pid, pid_str);
+        proc_append_str(io, &out_idx, pid_str);
+
+        int pad = 6 - (int) strlen(pid_str);
+        while (pad-- > 0) proc_append_str(io, &out_idx, " ");
+
+        const char *state_str = "UNKNOWN";
+        if (list[i].state == 0)      state_str = "READY  ";
+        else if (list[i].state == 1) state_str = "RUNNING";
+        else if (list[i].state == 2) state_str = "WAITING";
+
+        proc_append_str(io, &out_idx, state_str);
+        proc_append_str(io, &out_idx, "  ");
+        proc_append_str(io, &out_idx, list[i].name);
+        proc_append_str(io, &out_idx, "\n");
+    }
+
+    io->output_buffer[out_idx] = '\0';
+    io->output_len = out_idx;
+}
+
+void cmd_kill(int argc, char **argv, struct ShellIO *io) {
+    if (argc < 2) {
+        const char *usage = "kill: Penggunaan: kill <pid>\n";
+        memcpy(io->output_buffer, usage, strlen(usage));
+        io->output_len = (int) strlen(usage);
+        return;
+    }
+
+    uint32_t pid = 0;
+    if (!proc_parse_uint32(argv[1], &pid) || pid == 0) {
+        const char *err = "kill: PID tidak valid\n";
+        memcpy(io->output_buffer, err, strlen(err));
+        io->output_len = (int) strlen(err);
+        return;
+    }
+
+    int32_t retcode = -1;
+    syscall(SYSCALL_KILL, pid, (uint32_t) &retcode, 0);
+
+    if (retcode != 0) {
+        const char *err = "kill: Proses tidak ditemukan\n";
+        memcpy(io->output_buffer, err, strlen(err));
+        io->output_len = (int) strlen(err);
+    }
+}
 

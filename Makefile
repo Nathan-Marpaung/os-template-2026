@@ -53,6 +53,7 @@ CFLAGS        = $(DEBUG_CFLAG) $(WARNING_CFLAG) $(STRIP_CFLAG) $(ARCH_CFLAG) -c 
 AFLAGS        = -f elf32 -g -F dwarf
 LFLAGS        = -T $(SOURCE_FOLDER)/linker.ld -melf_i386
 
+QEMU_AUDIO ?= -audiodev coreaudio,id=snd0 -machine pcspk-audiodev=snd0
 
 run: all
 	@qemu-system-i386 \

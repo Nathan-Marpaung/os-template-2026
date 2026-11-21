@@ -9,6 +9,7 @@
 #include "header/syscall/syscall.h"
 #include "header/process/process.h"
 #include "header/scheduler/scheduler.h"
+#include "header/driver/cmos.h"
 
 struct TSSEntry _interrupt_tss_entry = {
     .ss0 = GDT_KERNEL_DATA_SEGMENT_SELECTOR,
@@ -250,6 +251,16 @@ void handle_syscall(struct InterruptFrame *frame) {
             uint32_t *size = (uint32_t *)frame->cpu.general.ecx;
             frame->cpu.general.eax = (uint32_t)(int32_t)
                 get_file_size(request, size);
+            break;
+        }
+        case SYS_GET_RTC: {
+            struct RTCTime *rtc_time = (struct RTCTime *)frame->cpu.general.ebx;
+            if (rtc_time == NULL) {
+                frame->cpu.general.eax = (uint32_t)-1;
+            } else {
+                cmos_read_time(rtc_time);
+                frame->cpu.general.eax = 0;
+            }
             break;
         }
         default:

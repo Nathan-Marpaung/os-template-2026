@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include "header/filesystem/ext2.h"
 #include "header/syscall/syscall.h"
+#include "header/driver/cmos.h"
 
 #define MAX_INPUT_SIZE 256u
 #define MAX_PATH_SIZE 128u
@@ -161,6 +162,38 @@ static void print_number_color(uint32_t number, uint8_t color) {
     while (count != 0) {
         print_char_color(digits[--count], color);
     }
+}
+
+/* Tulis `value` sebagai dua digit ke text, kembalikan posisi berikutnya. */
+static char *put_two_digits(char *text, uint32_t value) {
+    *text++ = (char)('0' + (value / 10u) % 10u);
+    *text++ = (char)('0' + value % 10u);
+    return text;
+}
+
+static void command_time(void) {
+    struct RTCTime now;
+    char text[24];
+    char *cursor = text;
+    if (call_syscall(SYS_GET_RTC, (uint32_t)&now, 0, 0) != 0) {
+        print_error("time: RTC read failed\n");
+        return;
+    }
+    cursor = put_two_digits(cursor, now.year / 100u);
+    cursor = put_two_digits(cursor, now.year);
+    *cursor++ = '-';
+    cursor = put_two_digits(cursor, now.month);
+    *cursor++ = '-';
+    cursor = put_two_digits(cursor, now.day);
+    *cursor++ = ' ';
+    cursor = put_two_digits(cursor, now.hour);
+    *cursor++ = ':';
+    cursor = put_two_digits(cursor, now.minute);
+    *cursor++ = ':';
+    cursor = put_two_digits(cursor, now.second);
+    *cursor++ = '\n';
+    *cursor = '\0';
+    print_text_color(text, COLOR_LIGHT_GRAY);
 }
 
 static void print_prompt(void) {
@@ -730,7 +763,9 @@ static void print_help(void) {
     print_text_color("  exec file               ", COLOR_WHITE);
     print_text_color("run a flat binary\n", COLOR_DARK_GRAY);
     print_text_color("  time                    ", COLOR_WHITE);
-    print_text_color("show uptime in milliseconds\n", COLOR_DARK_GRAY);
+    print_text_color("show current date and time\n", COLOR_DARK_GRAY);
+    print_text_color("  uptime                  ", COLOR_WHITE);
+    print_text_color("show uptime in ms\n", COLOR_DARK_GRAY);
     print_text_color("  exit                    ", COLOR_WHITE);
     print_text_color("exit this process\n", COLOR_DARK_GRAY);
 }
@@ -817,6 +852,8 @@ static void parse_and_execute(char *line) {
     } else if (text_equal(command, "exec") && argument_count == 2) {
         command_exec(arguments[1]);
     } else if (text_equal(command, "time") && argument_count == 1) {
+        command_time();
+    } else if (text_equal(command, "uptime") && argument_count == 1) {
         print_text_color("Uptime: ", COLOR_DARK_GRAY);
         print_number_color((uint32_t)call_syscall(SYS_GET_TIME, 0, 0, 0), COLOR_LIGHT_GRAY);
         print_text_color(" ms\n", COLOR_DARK_GRAY);

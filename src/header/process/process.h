@@ -9,7 +9,7 @@
 #include "header/filesystem/ext2.h"
 
 #define PROCESS_NAME_LENGTH_MAX      32
-#define PROCESS_PAGE_FRAME_COUNT_MAX 8
+#define PROCESS_PAGE_FRAME_COUNT_MAX 12
 #define PROCESS_COUNT_MAX            16
 
 /* EFLAGS bits required when a process is first resumed. */

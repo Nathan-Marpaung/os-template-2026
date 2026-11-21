@@ -59,14 +59,37 @@ static int load_file(const char *path, uint8_t **buffer, size_t *size) {
     return 0;
 }
 
+/* Ambil nama file saja dari sebuah path (tanpa direktori). */
+static const char *path_basename(const char *path) {
+    const char *name = path;
+    for (const char *cursor = path; *cursor != '\0'; ++cursor) {
+        if (*cursor == '/' || *cursor == '\\') {
+            name = cursor + 1;
+        }
+    }
+    return name;
+}
+
 int main(int argc, char **argv) {
     uint8_t *program;
     size_t program_size;
     struct EXT2DriverRequest request;
     int8_t result;
+    const char *program_name;
+    size_t program_name_length;
 
-    if (argc != 4) {
-        fprintf(stderr, "usage: %s <program> <parent-inode> <disk-image>\n", argv[0]);
+    if (argc != 4 && argc != 5) {
+        fprintf(stderr,
+                "usage: %s <program> <parent-inode> <disk-image> [name-in-disk]\n"
+                "  name-in-disk defaults to the file name of <program>\n",
+                argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    program_name = argc == 5 ? argv[4] : path_basename(argv[1]);
+    program_name_length = strlen(program_name);
+    if (program_name_length == 0 || program_name_length > UINT8_MAX) {
+        fprintf(stderr, "invalid program name in disk\n");
         return EXIT_FAILURE;
     }
 
@@ -85,8 +108,8 @@ int main(int argc, char **argv) {
 
     initialize_filesystem_ext2();
     request.buf = program;
-    request.name = "shell";
-    request.name_len = 5;
+    request.name = (char *)program_name;
+    request.name_len = (uint8_t)program_name_length;
     request.parent_inode = (uint32_t)strtoul(argv[2], NULL, 10);
     request.buffer_size = (uint32_t)program_size;
     request.is_directory = false;
@@ -105,7 +128,7 @@ int main(int argc, char **argv) {
     free(program);
 
     if (result != 0) {
-        fprintf(stderr, "failed to insert shell (error %d)\n", result);
+        fprintf(stderr, "failed to insert %s (error %d)\n", program_name, result);
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

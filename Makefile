@@ -25,9 +25,9 @@ CFLAGS        = $(DEBUG_CFLAG) $(WARNING_CFLAG) $(STRIP_CFLAG) -DDISK_DRIVER_SEL
 AFLAGS        = -f elf32 -g -F dwarf
 LFLAGS        = -T $(SOURCE_FOLDER)/linker.ld -melf_i386
 
-.PHONY: run all build disk clean kernel iso user-shell inserter insert-shell
+.PHONY: run all build disk clean kernel iso user-shell user-clock inserter insert-shell insert-clock
 
-run: all insert-shell
+run: all insert-shell insert-clock
 	@$(QEMU) \
 		-cdrom $(OUTPUT_FOLDER)/$(ISO_NAME).iso \
 		-drive file=$(OUTPUT_FOLDER)/$(DISK_NAME).bin,format=raw,if=ide,index=0,media=disk
@@ -113,6 +113,17 @@ user-shell:
 		-o $(OUTPUT_FOLDER)/shell_elf
 	@rm -f $(OUTPUT_FOLDER)/user-crt0.o $(OUTPUT_FOLDER)/user-shell.o
 
+# clock dijalankan lewat `exec clock` di shell, yang memuat program di 0x1000,
+# sehingga linker script-nya memakai alamat awal 0x1000.
+user-clock:
+	@mkdir -p $(OUTPUT_FOLDER)
+	@$(ASM) $(AFLAGS) user/crt0.s -o $(OUTPUT_FOLDER)/user-crt0.o
+	@$(CC) $(CFLAGS) -fno-pie user/clock.c -o $(OUTPUT_FOLDER)/user-clock.o
+	@$(LIN) -T user/user-linker-exec.ld -melf_i386 --oformat=binary \
+		$(OUTPUT_FOLDER)/user-crt0.o $(OUTPUT_FOLDER)/user-clock.o \
+		-o $(OUTPUT_FOLDER)/clock
+	@rm -f $(OUTPUT_FOLDER)/user-crt0.o $(OUTPUT_FOLDER)/user-clock.o
+
 inserter:
 	@$(CC) -std=c11 -Wall -Wextra -Werror -I$(SOURCE_FOLDER) \
 		tools/external-inserter.c $(SOURCE_FOLDER)/filesystem/ext2.c \
@@ -120,3 +131,6 @@ inserter:
 
 insert-shell: inserter user-shell $(OUTPUT_FOLDER)/$(DISK_NAME).bin
 	@cd $(OUTPUT_FOLDER) && ./inserter shell 1 $(DISK_NAME).bin
+
+insert-clock: inserter user-clock $(OUTPUT_FOLDER)/$(DISK_NAME).bin
+	@cd $(OUTPUT_FOLDER) && ./inserter clock 1 $(DISK_NAME).bin

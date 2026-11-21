@@ -20,7 +20,7 @@ LFLAGS        = -T $(SOURCE_FOLDER)/linker.ld -melf_i386
 .PHONY: run all build clean kernel iso disk
 
 # 'disk' hanya membuat storage.bin jika belum ada (isi disk lama tidak ditimpa)
-run: all disk insert-shell 
+run: all disk insert-shell insert-hello
 	@qemu-system-i386 -s \
 		-drive file=$(OUTPUT_FOLDER)/$(DISK_NAME).bin,format=raw,if=ide,index=0,media=disk \
 		-cdrom $(OUTPUT_FOLDER)/$(ISO_NAME).iso
@@ -99,3 +99,15 @@ insert-shell: inserter user-shell
 	@echo Inserting shell into root directory...
 	@cd $(OUTPUT_FOLDER); ./inserter shell 1 $(DISK_NAME).bin
 
+user-hello:
+	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
+	@$(CC)  $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/hello.c -o hello.o
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 --oformat=binary \
+		crt0.o hello.o -o $(OUTPUT_FOLDER)/hello
+	@echo Linking hello object files and generate flat binary...
+	@size --target=binary $(OUTPUT_FOLDER)/hello
+	@rm -f *.o
+
+insert-hello: inserter user-hello
+	@echo Inserting hello into root directory...
+	@cd $(OUTPUT_FOLDER); ./inserter hello 1 $(DISK_NAME).bin

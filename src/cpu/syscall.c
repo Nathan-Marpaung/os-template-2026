@@ -8,6 +8,7 @@
 #include "header/cpu/cmos.h"
 #include "header/process/process.h"
 #include "header/memory/swap.h"
+#include "header/cpu/speaker.h"
 
 /* Semua alamat milik user berada di bawah higher half kernel */
 #define USER_SPACE_END 0xC0000000u
@@ -294,6 +295,12 @@ uint32_t syscall_handler(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx)
 
             return SYSCALL_RESULT_SWITCH_PROCESS;
         }
+
+        case SYSCALL_SPEAKER:
+            if (ebx == 0) speaker_stop();
+            else if (ecx == 0) speaker_play(ebx);
+            else speaker_beep(ebx, ecx);
+            break;
 
 
     default:

@@ -54,10 +54,9 @@ static inline void process_interrupt_restore(uint32_t eflags) {
 
 // Alokasi 1 halaman yang sedang aktif & catat di PCB
 static bool process_allocate_page(struct ProcessControlBlock *pcb, struct PageDirectory *page_dir, uint32_t virtual_adr) {
-    if (pcb->memory.page_frame_used_count >= PROCESS_PAGE_FRAME_COUNT_MAX) return false;
     if (!paging_allocate_user_page_frame(page_dir, (void *) virtual_adr)) return false;
 
-    pcb->memory.virtual_addr_used[pcb->memory.page_frame_used_count++] = (void *) virtual_adr;
+    pcb->memory.page_frame_used_count++;
     return true;
 }
 
@@ -153,12 +152,11 @@ int32_t process_create_user_process_args(struct EXT2DriverRequest request, const
     //Halaman kode/data
     uint32_t code_page_count = ceil_div(file_size, PAGE_FRAME_SIZE);
     uint32_t page_frame_count_needed = code_page_count+ 1 ;
-
-    // Check whether memory is enough for the executable and additional frame for user stack
-    if (!paging_allocate_check(page_frame_count_needed * PAGE_FRAME_SIZE) || page_frame_count_needed > PROCESS_PAGE_FRAME_COUNT_MAX) {
+    if (!paging_allocate_check(page_frame_count_needed * PAGE_FRAME_SIZE)) {
         retcode = PROCESS_CREATE_FAIL_NOT_ENOUGH_MEMORY;
         goto exit_cleanup;
     }
+
 
     // Process PCB 
     int32_t p_index = process_list_get_inactive_index();
@@ -215,6 +213,8 @@ int32_t process_create_user_process_args(struct EXT2DriverRequest request, const
     ctx->eip = (uint32_t) request.buf;
     ctx->eflags = CPU_EFLAGS_BASE_FLAG | CPU_EFLAGS_FLAG_INTERRUPT_ENABLE;
     ctx->page_directory_virtual_addr = new_page_dir;
+    new_pcb->memory.heap_start = PROCESS_USER_HEAP_START;
+    new_pcb->memory.heap_break = PROCESS_USER_HEAP_START;
 
     // METADATA
     new_pcb->metadata.pid = process_generate_new_pid();
@@ -281,7 +281,57 @@ uint32_t process_get_info(struct ProcessInfo *info, uint32_t max_count) {
         memcpy(info[count].name, pcb->metadata.name, PROCESS_INFO_NAME_LENGTH);
         info[count].name[PROCESS_INFO_NAME_LENGTH-1] = '\0';
         info[count].state = (uint8_t) pcb->metadata.state;
+        info[count].page_count = pcb->memory.page_frame_used_count;
         count++;
     }
     return count;
+}
+
+static uint32_t page_allign_up(uint32_t addr) {
+    return (addr + PAGE_FRAME_SIZE - 1) & ~(PAGE_FRAME_SIZE - 1);
+}
+
+uint32_t process_sbrk(int32_t increment) {
+    struct ProcessControlBlock *pcb = process_get_current_running_pcb_pointer();
+    if (pcb == NULL) return PROCESS_SBRK_FAIL;
+
+    uint32_t old_break = pcb->memory.heap_break;
+    if (increment == 0) return old_break;
+
+    if (increment > 0) {
+        uint32_t grow = (uint32_t) increment;
+        if (grow > PROCESS_USER_HEAP_LIMIT - old_break) return PROCESS_SBRK_FAIL;
+
+        uint32_t new_pages = (page_allign_up(old_break + grow) - page_allign_up(old_break)) / PAGE_FRAME_SIZE;
+        if (!paging_allocate_check((new_pages + PROCESS_SBRK_RESERVE_PAGES) *PAGE_FRAME_SIZE)) return PROCESS_SBRK_FAIL;
+
+        pcb->memory.heap_break = old_break + grow;
+        return old_break;
+    }
+
+    uint32_t shrink = (uint32_t) (-(increment + 1))+1;
+    if (shrink > old_break - pcb->memory.heap_start) return PROCESS_SBRK_FAIL;
+    uint32_t new_break = old_break - shrink;
+
+    uint32_t eflags = process_interrupt_save_and_disable();
+
+    struct PageDirectory *page_dir = paging_get_current_page_directory_addr();
+    for (uint32_t p = page_allign_up(new_break); p<page_allign_up(old_break); p += PAGE_FRAME_SIZE) {
+        if (paging_free_user_page_frame(page_dir, (void *) p)) {
+            pcb->memory.page_frame_used_count--;
+        }
+    }
+    pcb->memory.heap_break = new_break;
+    process_interrupt_restore(eflags);
+    return old_break;
+}
+
+bool process_is_heap_adress(uint32_t addr) {
+    struct ProcessControlBlock *pcb = process_get_current_running_pcb_pointer();
+    return pcb != NULL && addr >= pcb->memory.heap_start && addr < pcb->memory.heap_break;
+}
+
+void process_count_demand_page(void) {
+    struct ProcessControlBlock *pcb = process_get_current_running_pcb_pointer();
+    if (pcb != NULL) pcb->memory.page_frame_used_count++;
 }

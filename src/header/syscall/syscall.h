@@ -23,11 +23,13 @@
  *  11  | FS ukuran file         | struct EXT2DriverRequest *   | int8_t *return code   | uint32_t *size
  *  12  | exit                   | return code main()           | -                     | -
  *  13  | waktu CMOS (RTC)       | struct CMOSTime *            | -                     | -
- *  15 | buat process (exec)    | struct EXT2DriverRequest *   | int32_t *return code  | struct ProcessArgs * (boleh 0)
- *  15 | buat process (exec)    | struct EXT2DriverRequest *   | int32_t *return code  | -
- *  16 | kill process           | pid                          | int8_t *hasil (1 ok)  | -
- *  17 | info process (ps)      | struct ProcessInfo * array   | kapasitas array       | uint32_t *jumlah
-  * 18 | tunggu process (wait) | pid.
+ *  15 | buat process (exec)     | struct EXT2DriverRequest *   | int32_t *return code  | struct ProcessArgs * (boleh 0)
+ *  15 | buat process (exec)     | struct EXT2DriverRequest *   | int32_t *return code  | -
+ *  16 | kill process            | pid                          | int8_t *hasil (1 ok)  | -
+ *  17 | info process (ps)       | struct ProcessInfo * array   | kapasitas array       | uint32_t *jumlah
+ *  18 | tunggu process (wait)   | pid.
+ *  19 | speaker (beep)          | frekuensi (Hz, 0 = mati)     | durasi (ms) 
+ *  20 | sbrk (ubah ukuran heap) | int32_t increment (byte)     | uint32_t *batas lama  | -
  *
  * Warna: 4 bit bawah = huruf, 4 bit atas = background.
  * Return code FS mengikuti spesifikasi CRUD Chapter 2, ditambah -1 jika argumen syscall invalid.
@@ -54,6 +56,9 @@
 #define SYSCALL_PROCESS_INFO        17
 #define SYSCALL_PROCESS_WAIT        18
 #define SYSCALL_SPEAKER             19
+#define SYSCALL_SBRK                20
+#define SYSCALL_SBRK_FAIL           0xFFFFFFFF
+
 
 /**
  * argc/argv untuk SYSCALL_PROCESS_CREATE (edx = struct ProcessArgs * milik user, 0 jika tanpa argumen).
@@ -73,6 +78,7 @@ struct ProcessInfo {
     uint32_t pid;
     char     name[PROCESS_INFO_NAME_LENGTH];
     uint8_t  state;
+    uint32_t page_count;
 };
 
 #define SYSCALL_RESULT_NORMAL 0 // kembali ke process pemanggil

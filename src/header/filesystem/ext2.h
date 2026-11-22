@@ -399,4 +399,60 @@ void allocate_node_blocks(void *ptr, struct EXT2Inode *node, uint32_t prefered_b
  */
 void sync_node(struct EXT2Inode *node, uint32_t inode);
 
+/* =============================== IN-MEMORY INDEXING =============================== */
+
+#define EXT2_INDEX_MAX_ENTRIES  128u
+#define EXT2_INDEX_HASH_BUCKETS 128u
+#define EXT2_INDEX_NAME_MAX     32u
+#define EXT2_INDEX_PATH_MAX     96u
+
+struct EXT2IndexEntry {
+    bool     valid;
+    uint32_t inode;
+    uint32_t parent_inode;
+    uint8_t  file_type;
+    uint8_t  name_len;
+    char     name[EXT2_INDEX_NAME_MAX];
+    char     path[EXT2_INDEX_PATH_MAX];
+    uint32_t name_hash;
+    int16_t  next_hash;
+};
+
+/**
+ * Rebuild the in-memory EXT2 hash index from the filesystem starting at root inode 1.
+ */
+void ext2_index_rebuild(void);
+
+/**
+ * Insert a newly created file or directory into the in-memory EXT2 hash index.
+ */
+void ext2_index_insert(
+    uint32_t inode,
+    uint32_t parent_inode,
+    const char *name,
+    uint8_t name_len,
+    uint8_t file_type
+);
+
+/**
+ * Remove a deleted file or directory from the in-memory EXT2 hash index.
+ */
+void ext2_index_remove(
+    uint32_t inode,
+    uint32_t parent_inode,
+    const char *name,
+    uint8_t name_len
+);
+
+/**
+ * Query the in-memory EXT2 index for entries matching `pattern` (instant lookup without disk DFS/BFS).
+ * Formats matching paths and inode numbers into `out_buffer`.
+ *
+ * @param pattern    Substring or exact filename to search (NULL or "" matches all indexed entries)
+ * @param out_buffer Output text buffer
+ * @param max_size   Capacity of out_buffer in bytes
+ * @return           Number of matching entries found
+ */
+int32_t ext2_index_find(const char *pattern, char *out_buffer, uint32_t max_size);
+
 #endif

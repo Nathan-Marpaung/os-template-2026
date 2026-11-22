@@ -273,6 +273,12 @@ void handle_syscall(struct InterruptFrame *frame) {
             frame->cpu.general.eax = (uint32_t)ext2_index_find(pattern, out_buf, max_size);
             break;
         }
+        case SYS_SHUTDOWN: {
+            out16(0x604, 0x2000);
+            out16(0xB004, 0x2000);
+            __asm__ volatile("cli; hlt");
+            break;
+        }
         default:
             frame->cpu.general.eax = (uint32_t)-1;
             break;

@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include "header/stdlib/syscall_nums.h"
 #include "header/stdlib/shell_cmd.h"
+#include "header/stdlib/shell_path.h"
 #include "header/stdlib/string.h" 
 
 // Wrapper Syscall
@@ -22,7 +23,8 @@ char cwd_path[256] = "/";
 
 int main(void) {
     char input_buf[256];
-    syscall(SYSCALL_KEYBOARD, 0, 0, 0); 
+    syscall(SYSCALL_KEYBOARD, 0, 0, 0);
+    path_load(); 
 
     while (true) {
         print_str("G10-OS@");
@@ -129,6 +131,10 @@ int main(void) {
                 cmd_ps(argc, argv, &io);
             } else if (strcmp(argv[0], "kill") == 0) {
                 cmd_kill(argc, argv, &io);
+            } else if (strcmp(argv[0], "export") == 0) {
+                cmd_export(argc, argv, &io);
+            } else if (path_try_execute(argc, argv, &io)) {
+            
             } else {
                 char *err = "Command not found\n";
                 memcpy(io.output_buffer, err, strlen(err));

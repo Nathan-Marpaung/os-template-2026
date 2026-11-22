@@ -10,6 +10,33 @@ uint8_t *image_storage;
 uint8_t *file_buffer;
 uint8_t *read_buffer;
 bool is_replace = false;
+bool is_mkdir   = false;
+
+// Ubah argumen parent menjadi inode. Menerima angka ("1") atau path absolut ("/bin")
+static bool resolve_parent(const char *arg, uint32_t *out_inode) {
+    if (arg[0] != '/')
+        return sscanf(arg, "%u", out_inode) == 1;
+
+    static uint8_t dir_buf[BLOCK_SIZE];
+    uint32_t inode = 1;
+    const char *p = arg;
+    while (*p != '\0') {
+        while (*p == '/') p++;
+        const char *start = p;
+        while (*p != '\0' && *p != '/') p++;
+        if (p == start) break;
+
+        struct EXT2DriverRequest req = {
+            .buf = dir_buf, .name = (char*) start, .name_len = (uint8_t) (p - start),
+            .parent_inode = inode, .buffer_size = BLOCK_SIZE, .is_directory = true,
+        };
+        if (read_directory(&req) != 0)
+            return false;
+        inode = ((struct EXT2DirectoryEntry*) dir_buf)->inode;   // entry "." = folder itu sendiri
+    }
+    *out_inode = inode;
+    return true;
+}
 
 void read_blocks(void *ptr, uint32_t logical_block_address, uint8_t block_count) {
     for (int i = 0; i < block_count; i++) {
@@ -33,8 +60,9 @@ void write_blocks(const void *ptr, uint32_t logical_block_address, uint8_t block
 
 int main(int argc, char *argv[]) {
     int argi = 1;
-    if (argc >= 2 && strcmp(argv[1], "-f") == 0) {
-        is_replace = true;
+    while (argi < argc && argv[argi][0] == '-') {
+        if (strcmp(argv[argi], "-f") == 0)      is_replace = true;
+        else if (strcmp(argv[argi], "-d") == 0) is_mkdir   = true;
         argi++;
     }
 
@@ -69,6 +97,29 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+        // Mode -d: buat folder kosong lalu selesai
+    if (is_mkdir) {
+        initialize_filesystem_ext2();
+        struct EXT2DriverRequest dir_req = {
+            .buf = NULL, .name = (char*) target_path, .name_len = strlen(target_path),
+            .buffer_size = 0, .is_directory = true,
+        };
+        uint32_t dir_parent;
+        if (!resolve_parent(parent_str, &dir_parent)) {
+            fprintf(stderr, "inserter: parent '%s' not found\n", parent_str);
+            exit(1);
+        }
+        dir_req.parent_inode = dir_parent;
+        int rc = write(&dir_req);
+        if (rc == 0)      printf("Folder '%s' created\n", target_path);
+        else if (rc == 1) printf("Folder '%s' already exists\n", target_path);
+        else              printf("Error: cannot create folder (%d)\n", rc);
+        fseek(fptr, 0, SEEK_SET);
+        fwrite(image_storage, 4 * 1024 * 1024, 1, fptr);
+        fclose(fptr);
+        return 0;
+    }
+
     // Read target file, assuming file is less than 4 MiB
     FILE *fptr_target = fopen(target_path, "rb");
     if (fptr_target == NULL) {
@@ -95,7 +146,12 @@ int main(int argc, char *argv[]) {
     request.name = name;
     request.name_len = filename_length;
     request.is_directory = false;
-    sscanf(parent_str, "%u", &request.parent_inode);
+    uint32_t parent_inode;
+    if (!resolve_parent(parent_str, &parent_inode)) {
+        fprintf(stderr, "inserter: parent '%s' not found\n", parent_str);
+        exit(1);
+    }
+    request.parent_inode = parent_inode;
     sscanf(target_path, "%s", request.name);
 
     reqread = request;

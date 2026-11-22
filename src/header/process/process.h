@@ -12,12 +12,15 @@
 
 
 #define PROCESS_NAME_LENGTH_MAX          32
-#define PROCESS_PAGE_FRAME_COUNT_MAX     32
 #define PROCESS_COUNT_MAX                16
 
 #define KERNEL_VIRTUAL_ADDRESS_BASE      0xC0000000
 #define PROCESS_USER_STACK_PAGE          0xBFFFF000
 #define PROCESS_USER_STACK_TOP           0xBFFFFFFC
+#define PROCESS_USER_HEAP_START          0x00400000
+#define PROCESS_USER_HEAP_LIMIT          0xBF000000
+#define PROCESS_SBRK_FAIL                0xFFFFFFFF
+#define PROCESS_SBRK_RESERVE_PAGES       16
 
 #define CPU_EFLAGS_BASE_FLAG               0x2
 #define CPU_EFLAGS_FLAG_CARRY              0x1
@@ -71,8 +74,9 @@ struct ProcessControlBlock {
     struct Context context;
 
     struct {
-        void     *virtual_addr_used[PROCESS_PAGE_FRAME_COUNT_MAX];
         uint32_t page_frame_used_count;
+        uint32_t heap_start;
+        uint32_t heap_break;
     } memory;
 };
 
@@ -107,7 +111,6 @@ struct ProcessControlBlock* process_get_current_running_pcb_pointer(void);
  */
 int32_t process_create_user_process(struct EXT2DriverRequest request);
 int32_t process_create_user_process_args(struct EXT2DriverRequest request, const struct ProcessArgvBlob *args);
-int32_t process_create_user_process_args(struct EXT2DriverRequest request, const struct ProcessArgvBlob *args);
 uint32_t process_get_last_created_pid(void);
 bool process_is_alive(uint32_t pid);
 
@@ -127,4 +130,10 @@ bool process_destroy(uint32_t pid);
  * @return          Jumlah entri yang ditulis
  */
 uint32_t process_get_info(struct ProcessInfo *info, uint32_t max_count);
+
+uint32_t process_sbrk(int32_t increment);
+
+bool process_is_heap_adress(uint32_t address);
+
+void process_count_demand_page(void);
 #endif

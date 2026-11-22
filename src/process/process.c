@@ -152,6 +152,10 @@ int32_t process_create_user_process_args(struct EXT2DriverRequest request, const
     //Halaman kode/data
     uint32_t code_page_count = ceil_div(file_size, PAGE_FRAME_SIZE);
     uint32_t page_frame_count_needed = code_page_count+ 1 ;
+    if (!paging_allocate_check(page_frame_count_needed * PAGE_FRAME_SIZE)) {
+        retcode = PROCESS_CREATE_FAIL_NOT_ENOUGH_MEMORY;
+        goto exit_cleanup;
+    }
 
 
     // Process PCB 
@@ -298,7 +302,7 @@ uint32_t process_sbrk(int32_t increment) {
         uint32_t grow = (uint32_t) increment;
         if (grow > PROCESS_USER_HEAP_LIMIT - old_break) return PROCESS_SBRK_FAIL;
 
-        uint32_t new_pages = (page_allign_up(old_break + grow) - page_allign_up(old_break) / PAGE_FRAME_SIZE);
+        uint32_t new_pages = (page_allign_up(old_break + grow) - page_allign_up(old_break)) / PAGE_FRAME_SIZE;
         if (!paging_allocate_check((new_pages + PROCESS_SBRK_RESERVE_PAGES) *PAGE_FRAME_SIZE)) return PROCESS_SBRK_FAIL;
 
         pcb->memory.heap_break = old_break + grow;

@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
     uint32_t target_pages = (kib * 1024 + PAGE_SIZE - 1) / PAGE_SIZE;
 
     uint32_t heap_start = sbrk(0);
-    put("grow: heap mulai di", 0x08);
+    put("grow: heap mulai di ", 0x0B);
     put_hex(heap_start, 0x0F);
     put(", target ", 0x0B);
     put_uint(target_pages, 0x0F);
@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
     // Verif halaman
     uint32_t bad=0;
     for (uint32_t p=0; p<pages; p++) {
-        uint32_t *page = (uint32_t *)(heap_start + p + PAGE_SIZE);
+        uint32_t *page = (uint32_t *)(heap_start + p * PAGE_SIZE);
         for (uint32_t w=0; w<PAGE_SIZE/4; w++) {
             if (page[w] != pattern(p,w)) {
                 bad++;
@@ -136,7 +136,7 @@ int main(int argc, char *argv[]) {
     // Kecilkan lagi
     sbrk(-(int32_t)(pages * PAGE_SIZE));
     put("grow: heap dilepas, ukuran heap sekarang ", 0x0B);
-    put_uint(sbrk(0) - heap_start / 1024, 0x0F);
+    put_uint((sbrk(0) - heap_start) / 1024, 0x0F);
     put(" KB\n", 0x0B);
     return bad == 0 ? 0 : 1;
 }

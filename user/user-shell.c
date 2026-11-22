@@ -603,7 +603,12 @@ static bool parse_number(const char *text, uint32_t *number) {
     return true;
 }
 
-static void command_exec(const char *path) {
+static void command_exec(uint32_t argc, char *argv[]) {
+    if (argc == 0 || argv == NULL || argv[0] == NULL) {
+        print_error("exec: missing executable path\n");
+        return;
+    }
+    const char *path = argv[0];
     uint32_t parent_inode;
     uint32_t size;
     char name[MAX_PATH_SIZE];
@@ -620,11 +625,20 @@ static void command_exec(const char *path) {
         .buffer_size = size,
         .is_directory = false,
     };
-    int32_t result = call_syscall(SYS_EXEC, (uint32_t)&request, 0, 0);
+    int32_t result = call_syscall(
+        SYS_EXEC,
+        (uint32_t)&request,
+        argc,
+        (uint32_t)argv
+    );
     if (result != 0) {
         print_error("exec: process creation failed (");
         print_number_color((uint32_t)result, COLOR_RED);
         print_error(")\n");
+        return;
+    }
+    uint32_t start_tick = (uint32_t)call_syscall(SYS_GET_TIME, 0, 0, 0);
+    while ((uint32_t)call_syscall(SYS_GET_TIME, 0, 0, 0) - start_tick < 50u) {
     }
 }
 
@@ -760,8 +774,8 @@ static void print_help(void) {
     print_text_color("list processes\n", COLOR_DARK_GRAY);
     print_text_color("  kill pid                ", COLOR_WHITE);
     print_text_color("terminate a process\n", COLOR_DARK_GRAY);
-    print_text_color("  exec file               ", COLOR_WHITE);
-    print_text_color("run a flat binary\n", COLOR_DARK_GRAY);
+    print_text_color("  exec file [args...]     ", COLOR_WHITE);
+    print_text_color("run a flat binary with argc/argv\n", COLOR_DARK_GRAY);
     print_text_color("  time                    ", COLOR_WHITE);
     print_text_color("show current date and time\n", COLOR_DARK_GRAY);
     print_text_color("  uptime                  ", COLOR_WHITE);
@@ -771,7 +785,7 @@ static void print_help(void) {
 }
 
 static void parse_and_execute(char *line) {
-    char *arguments[4];
+    char *arguments[8];
     uint32_t argument_count = 0;
     uint32_t index = 0;
 
@@ -849,8 +863,8 @@ static void parse_and_execute(char *line) {
             call_syscall(SYS_KILL, pid, 0, 0) != 0) {
             print_error("kill: invalid or inactive PID\n");
         }
-    } else if (text_equal(command, "exec") && argument_count == 2) {
-        command_exec(arguments[1]);
+    } else if (text_equal(command, "exec") && argument_count >= 2) {
+        command_exec(argument_count - 1u, &arguments[1]);
     } else if (text_equal(command, "time") && argument_count == 1) {
         command_time();
     } else if (text_equal(command, "uptime") && argument_count == 1) {

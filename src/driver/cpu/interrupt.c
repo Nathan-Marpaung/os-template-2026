@@ -202,8 +202,11 @@ void handle_syscall(struct InterruptFrame *frame) {
         case SYS_EXEC: {
             struct EXT2DriverRequest *request =
                 (struct EXT2DriverRequest *)frame->cpu.general.ebx;
+            uint32_t argc = frame->cpu.general.ecx;
+            const char *const *argv =
+                (const char *const *)frame->cpu.general.edx;
             frame->cpu.general.eax = request != NULL
-                ? (uint32_t)process_create_user_process(*request)
+                ? (uint32_t)process_create_user_process_args(*request, argc, argv)
                 : (uint32_t)-1;
             break;
         }

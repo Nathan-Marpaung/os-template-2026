@@ -11,6 +11,8 @@
 #define PROCESS_NAME_LENGTH_MAX      32
 #define PROCESS_PAGE_FRAME_COUNT_MAX 12
 #define PROCESS_COUNT_MAX            16
+#define PROCESS_ARG_MAX_COUNT        8
+#define PROCESS_ARG_MAX_LEN          64
 
 /* EFLAGS bits required when a process is first resumed. */
 #define CPU_EFLAGS_BASE_FLAG               0x00000002u
@@ -112,6 +114,20 @@ struct ProcessControlBlock* process_get_current_running_pcb_pointer(void);
  * @return        Process creation return code
  */
 int32_t process_create_user_process(struct EXT2DriverRequest request);
+
+/**
+ * Create new user process and initialize its user stack with argc and argv[].
+ *
+ * @param request Appropriate read request for the executable
+ * @param argc    Number of command-line arguments
+ * @param argv    Array of command-line argument strings from caller space
+ * @return        Process creation return code
+ */
+int32_t process_create_user_process_args(
+    struct EXT2DriverRequest request,
+    uint32_t argc,
+    const char *const *argv
+);
 
 /**
  * Destroy process then release page directory and process control block

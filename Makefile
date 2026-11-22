@@ -1,4 +1,4 @@
-.PHONY: run all build kernel iso disk clean user-shell inserter insert-hello user-hello insert-shell user-clock insert-clock user-args insert-args insert-all setup
+.PHONY: run all build kernel iso disk clean user-shell inserter insert-hello user-hello insert-shell user-clock insert-clock user-args insert-args insert-all setup user-grow insert-grow
 
 # Target default: "make" tanpa argumen langsung build + jalankan OS
 .DEFAULT_GOAL := run
@@ -187,8 +187,21 @@ insert-args: inserter user-args
 	@echo Inserting args-demo into EXT2 filesystem...
 	@cd $(OUTPUT_FOLDER); ./inserter -f args-demo 1 storage.bin
 
-# Masukkan semua user program (shell, hello, clock, args-demo) ke storage.bin
-insert-all: insert-shell insert-hello insert-clock insert-args
+user-grow:
+	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
+	@$(CC) $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/external/grow.c -o grow.o
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 --oformat=binary \
+		crt0.o grow.o -o $(OUTPUT_FOLDER)/grow
+	@echo Linking grow and generating flat binary...
+	@wc -c $(OUTPUT_FOLDER)/grow
+	@rm -f *.o
+
+insert-grow: inserter user-grow
+	@echo Inserting grow into EXT2 filesystem...
+	@cd $(OUTPUT_FOLDER); ./inserter -f grow 1 storage.bin
+
+# Masukkan semua user program (shell, hello, clock, args-demo, grow) ke storage.bin
+insert-all: insert-shell insert-hello insert-clock insert-args insert-grow
 
 # Setup pertama kali: disk baru + semua program, lalu build kernel
 setup: clean disk insert-all build

@@ -7,8 +7,11 @@
 #include "header/text/framebuffer.h"
 #include "header/memory/paging.h"
 #include "header/scheduler/scheduler.h"
-#include "header/driver/cmos.h"
+#include "header/process/process.h"
+#include "header/stdlib/string.h"
 #include "header/stdlib/syscall_nums.h"
+#include "header/driver/cmos.h"
+#include <stddef.h>
 #include <stdint.h>
 
 void io_wait(void) {
@@ -93,6 +96,68 @@ void syscall(struct InterruptFrame frame) {
         case 7: 
             keyboard_state_activate();
             break;
+        case SYSCALL_EXIT: {
+            struct ProcessControlBlock *curr = process_get_current_running_pcb_pointer();
+            if (curr != NULL) {
+                process_destroy(curr->metadata.pid);
+            }
+            scheduler_switch_to_next_process();
+        }
+        case SYSCALL_EXEC: {
+            struct EXT2DriverRequest *user_req = (struct EXT2DriverRequest*) frame.cpu.general.ebx;
+            int32_t *ret_ptr = (int32_t*) frame.cpu.general.ecx;
+
+            struct EXT2DriverRequest kreq = *user_req;
+            char kname[PROCESS_NAME_LENGTH_MAX];
+            uint32_t nlen = kreq.name_len;
+            if (nlen >= PROCESS_NAME_LENGTH_MAX) nlen = PROCESS_NAME_LENGTH_MAX - 1;
+            memcpy(kname, kreq.name, nlen);
+            kname[nlen] = '\0';
+
+            kreq.name = kname;
+            kreq.name_len = (uint8_t) nlen;
+            kreq.is_directory = false;
+            kreq.buf = (void*) 0x0;
+            if (kreq.buffer_size == 0) kreq.buffer_size = 0x40000;
+
+            int32_t res = process_create_user_process(kreq);
+            if (ret_ptr != NULL) *ret_ptr = res;
+            break;
+        }
+        case SYSCALL_KILL: {
+            uint32_t target_pid = frame.cpu.general.ebx;
+            int32_t *ret_ptr = (int32_t*) frame.cpu.general.ecx;
+            struct ProcessControlBlock *curr = process_get_current_running_pcb_pointer();
+
+            if (curr != NULL && curr->metadata.pid == target_pid) {
+                process_destroy(target_pid);
+                scheduler_switch_to_next_process();
+            }
+
+            bool ok = process_destroy(target_pid);
+            if (ret_ptr != NULL) *ret_ptr = ok ? 0 : -1;
+            break;
+        }
+        case SYSCALL_PS: {
+            struct ProcessInfo *out_list = (struct ProcessInfo*) frame.cpu.general.ebx;
+            uint32_t max_count = frame.cpu.general.ecx;
+            uint32_t *out_count = (uint32_t*) frame.cpu.general.edx;
+
+            uint32_t count = 0;
+            if (out_list != NULL) {
+                for (uint32_t i = 0; i < PROCESS_COUNT_MAX && count < max_count; i++) {
+                    if (_process_list[i].metadata.active) {
+                        out_list[count].pid = _process_list[i].metadata.pid;
+                        memcpy(out_list[count].name, _process_list[i].metadata.name, PROCESS_INFO_NAME_MAX);
+                        out_list[count].name[PROCESS_INFO_NAME_MAX - 1] = '\0';
+                        out_list[count].state = (uint8_t) _process_list[i].metadata.state;
+                        count++;
+                    }
+                }
+            }
+            if (out_count != NULL) *out_count = count;
+            break;
+        }
         case SYSCALL_GET_TIME:
             if (frame.cpu.general.ebx < 0xC0000000)
                 cmos_read_time((struct CMOSTime*) frame.cpu.general.ebx);

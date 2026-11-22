@@ -123,6 +123,12 @@ int main(void) {
                 cmd_rm(argc, argv, &io, current_cwd_inode);
             } else if (strcmp(argv[0], "mv") == 0) {
                 cmd_mv(argc, argv, &io, current_cwd_inode);
+            } else if (strcmp(argv[0], "exec") == 0) {
+                cmd_exec(argc, argv, &io, current_cwd_inode);
+            } else if (strcmp(argv[0], "ps") == 0) {
+                cmd_ps(argc, argv, &io);
+            } else if (strcmp(argv[0], "kill") == 0) {
+                cmd_kill(argc, argv, &io);
             } else {
                 char *err = "Command not found\n";
                 memcpy(io.output_buffer, err, strlen(err));

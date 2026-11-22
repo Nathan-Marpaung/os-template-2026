@@ -1510,7 +1510,7 @@ static void cmd_ps(struct CmdCtx *ctx)
         return;
     }
 
-    ob_puts(ctx->out, "PID\tNAME\t\tSTATE\n");
+    ob_puts(ctx->out, "PID\tNAME\t\tSTATE\t\tMEM\n");
 
     for (uint32_t i = 0; i < count; i++)
     {
@@ -1548,6 +1548,18 @@ static void cmd_ps(struct CmdCtx *ctx)
         {
             ob_puts(ctx->out, "TERMINATED");
         }
+
+        ob_puts(ctx->out, "\t\t");
+        n=0;
+        value = info[i].page_count*4;
+        do {
+            digits[n++] = '0' + (value % 10);
+            value /= 10;
+        } while (value > 0);
+        while (n>0) {
+            ob_putc(ctx->out, digits[--n]);
+        }
+        ob_puts(ctx->out, " KB");
 
         ob_putc(ctx->out, '\n');
     }

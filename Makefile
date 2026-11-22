@@ -70,7 +70,7 @@ kernel:
 		$(SOURCE_FOLDER)/context-switch.s \
 		-o $(OUTPUT_FOLDER)/context-switch.o
 
-	@set -e; for file in $$(find $(SOURCE_FOLDER) -name '*.c'); do \
+	@set -e; for file in $$(find $(SOURCE_FOLDER) -name '*.c' -not -path '*/stdlib/filesystem/*'); do \
 		object=$(OUTPUT_FOLDER)/$$(basename $$file .c).o; \
 		$(CC) $(CFLAGS) $$file -o $$object; \
 	done

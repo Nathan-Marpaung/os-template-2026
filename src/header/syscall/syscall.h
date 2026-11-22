@@ -55,8 +55,8 @@
 #define SYSCALL_PROCESS_INFO        17
 #define SYSCALL_PROCESS_WAIT        18
 #define SYSCALL_SBRK                19
-
 #define SYSCALL_SBRK_FAIL           0xFFFFFFFF
+#define SYSCALL_SPEAKER             20
 
 /**
  * argc/argv untuk SYSCALL_PROCESS_CREATE (edx = struct ProcessArgs * milik user, 0 jika tanpa argumen).

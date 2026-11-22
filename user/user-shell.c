@@ -29,7 +29,6 @@
 
 static uint32_t current_directory = 1u;
 static uint8_t directory_buffer[MAX_DIRECTORY_SIZE];
-static uint8_t find_buffers[MAX_FIND_DEPTH][MAX_DIRECTORY_SIZE];
 static uint8_t file_buffer[MAX_FILE_SIZE];
 static char process_buffer[512];
 
@@ -47,23 +46,6 @@ static bool text_equal(const char *left, const char *right) {
         index++;
     }
     return left[index] == right[index];
-}
-
-static bool text_contains(const char *text, const char *pattern) {
-    if (*pattern == '\0') {
-        return true;
-    }
-    for (uint32_t start = 0; text[start] != '\0'; start++) {
-        uint32_t offset = 0;
-        while (pattern[offset] != '\0' &&
-               text[start + offset] == pattern[offset]) {
-            offset++;
-        }
-        if (pattern[offset] == '\0') {
-            return true;
-        }
-    }
-    return false;
 }
 
 static bool range_contains(const uint8_t *text,
@@ -642,81 +624,6 @@ static void command_exec(uint32_t argc, char *argv[]) {
     }
 }
 
-static void find_recursive(uint32_t inode,
-                           const char *display_path,
-                           const char *pattern,
-                           uint32_t depth) {
-    if (depth >= MAX_FIND_DEPTH) {
-        return;
-    }
-    uint8_t *buffer = find_buffers[depth];
-    for (uint32_t i = 0; i < MAX_DIRECTORY_SIZE; i++) {
-        buffer[i] = 0;
-    }
-    if (shell_read_directory(inode, buffer) != 0) {
-        return;
-    }
-
-    uint32_t offset = 0;
-    while (offset + sizeof(struct EXT2DirectoryEntry) <= MAX_DIRECTORY_SIZE) {
-        const struct EXT2DirectoryEntry *entry =
-            (const struct EXT2DirectoryEntry *)(buffer + offset);
-        if (entry->rec_len == 0) {
-            break;
-        }
-        if (entry->rec_len < sizeof(*entry) ||
-            entry->rec_len > MAX_DIRECTORY_SIZE - offset ||
-            entry->name_len > entry->rec_len - sizeof(*entry)) {
-            return;
-        }
-
-        const char *entry_name = (const char *)entry + sizeof(*entry);
-        bool dot_entry = (entry->name_len == 1 && entry_name[0] == '.') ||
-                         (entry->name_len == 2 && entry_name[0] == '.' &&
-                          entry_name[1] == '.');
-        if (entry->inode != 0 && !dot_entry) {
-            char child_path[MAX_PATH_SIZE];
-            uint32_t base_length = text_length(display_path);
-            uint32_t name_length = entry->name_len;
-            uint32_t separator = base_length != 0 &&
-                                 display_path[base_length - 1u] != '/' ? 1u : 0u;
-            if (base_length + separator + name_length + 1u < sizeof(child_path)) {
-                uint32_t pos = 0;
-                for (uint32_t i = 0; i < base_length; i++) {
-                    child_path[pos++] = display_path[i];
-                }
-                if (separator != 0) {
-                    child_path[pos++] = '/';
-                }
-                char entry_name_buffer[MAX_PATH_SIZE];
-                if (name_length >= sizeof(entry_name_buffer)) {
-                    offset += entry->rec_len;
-                    continue;
-                }
-                for (uint32_t i = 0; i < name_length; i++) {
-                    entry_name_buffer[i] = entry_name[i];
-                    child_path[pos++] = entry_name_buffer[i];
-                }
-                entry_name_buffer[name_length] = '\0';
-                child_path[pos] = '\0';
-
-                if (pattern == NULL || text_contains(child_path, pattern) ||
-                        text_contains(entry_name_buffer, pattern)) {
-                    print_text_color(
-                        child_path,
-                        (entry->file_type == EXT2_FT_DIR) ? COLOR_BLUE : COLOR_GREEN
-                    );
-                    print_char('\n');
-                }
-                if (entry->file_type == EXT2_FT_DIR) {
-                    find_recursive(entry->inode, child_path, pattern, depth + 1u);
-                }
-            }
-        }
-        offset += entry->rec_len;
-    }
-}
-
 static void command_grep(const char *pattern, const char *path) {
     uint32_t parent_inode;
     uint32_t size;
@@ -841,13 +748,27 @@ static void parse_and_execute(char *line) {
     } else if (text_equal(command, "mv") && argument_count == 3) {
         command_move(arguments[1], arguments[2]);
     } else if (text_equal(command, "find") && argument_count <= 3) {
-        const char *path = argument_count >= 2 ? arguments[1] : ".";
-        const char *pattern = argument_count == 3 ? arguments[2] : NULL;
-        uint32_t inode;
-        if (!resolve_directory_path(path, &inode)) {
-            print_error("find: directory not found\n");
+        const char *pattern = NULL;
+        if (argument_count == 2) {
+            pattern = text_equal(arguments[1], ".") || text_equal(arguments[1], "/")
+                ? ""
+                : arguments[1];
+        } else if (argument_count == 3) {
+            pattern = arguments[2];
         } else {
-            find_recursive(inode, path, pattern, 0);
+            pattern = "";
+        }
+        process_buffer[0] = '\0';
+        int32_t count = call_syscall(
+            SYS_FIND_INDEX,
+            (uint32_t)pattern,
+            (uint32_t)process_buffer,
+            sizeof(process_buffer)
+        );
+        if (count > 0) {
+            print_text_color(process_buffer, COLOR_GREEN);
+        } else {
+            print_error("find: no matching files in index\n");
         }
     } else if (text_equal(command, "grep") && argument_count == 3) {
         command_grep(arguments[1], arguments[2]);

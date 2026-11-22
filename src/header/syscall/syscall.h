@@ -21,6 +21,7 @@ struct EXT2DriverRequest;
 #define SYS_GET_TIME     11
 #define SYS_FILE_SIZE    12
 #define SYS_GET_RTC      13
+#define SYS_FIND_INDEX   14
 
 static inline int32_t system_call(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx) {
     int32_t ret;

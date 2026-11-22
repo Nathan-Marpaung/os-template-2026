@@ -266,6 +266,13 @@ void handle_syscall(struct InterruptFrame *frame) {
             }
             break;
         }
+        case SYS_FIND_INDEX: {
+            const char *pattern = (const char *)frame->cpu.general.ebx;
+            char *out_buf       = (char *)frame->cpu.general.ecx;
+            uint32_t max_size   = frame->cpu.general.edx;
+            frame->cpu.general.eax = (uint32_t)ext2_index_find(pattern, out_buf, max_size);
+            break;
+        }
         default:
             frame->cpu.general.eax = (uint32_t)-1;
             break;

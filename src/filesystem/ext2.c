@@ -45,6 +45,183 @@ const uint8_t fs_signature[BLOCK_SIZE] = {
 static struct EXT2Superblock _ext2_superblock;
 static struct EXT2BlockGroupDescriptorTable _ext2_bgd_table;
 
+static struct EXT2IndexEntry _ext2_index_entries[EXT2_INDEX_MAX_ENTRIES];
+static int16_t _ext2_hash_head[EXT2_INDEX_HASH_BUCKETS];
+static bool _ext2_index_initialized = false;
+
+static uint32_t ext2_hash_name(const char *name, uint8_t name_len) {
+    uint32_t hash = 2166136261u;
+    for (uint8_t i = 0; i < name_len; i++) {
+        hash ^= (uint8_t)name[i];
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+static uint32_t ext2_cstr_len(const char *s) {
+    uint32_t len = 0;
+    if (s == NULL) {
+        return 0;
+    }
+    while (s[len] != '\0') {
+        len++;
+    }
+    return len;
+}
+
+static bool ext2_substr_match(const char *haystack, const char *needle) {
+    if (needle == NULL || needle[0] == '\0') {
+        return true;
+    }
+    for (uint32_t i = 0; haystack[i] != '\0'; i++) {
+        uint32_t j = 0;
+        while (needle[j] != '\0' && haystack[i + j] == needle[j]) {
+            j++;
+        }
+        if (needle[j] == '\0') {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void ext2_index_clear(void) {
+    memset(_ext2_index_entries, 0, sizeof(_ext2_index_entries));
+    for (uint32_t i = 0; i < EXT2_INDEX_HASH_BUCKETS; i++) {
+        _ext2_hash_head[i] = -1;
+    }
+    _ext2_index_initialized = true;
+}
+
+static const char *ext2_index_get_path_by_inode(uint32_t inode) {
+    if (inode == 1u) {
+        return "/";
+    }
+    for (uint32_t i = 0; i < EXT2_INDEX_MAX_ENTRIES; i++) {
+        if (_ext2_index_entries[i].valid && _ext2_index_entries[i].inode == inode) {
+            return _ext2_index_entries[i].path;
+        }
+    }
+    return "/";
+}
+
+void ext2_index_insert(
+    uint32_t inode,
+    uint32_t parent_inode,
+    const char *name,
+    uint8_t name_len,
+    uint8_t file_type
+) {
+    if (!_ext2_index_initialized) {
+        ext2_index_clear();
+    }
+    if (name == NULL || name_len == 0 || inode == 0) {
+        return;
+    }
+    if ((name_len == 1 && name[0] == '.') ||
+        (name_len == 2 && name[0] == '.' && name[1] == '.')) {
+        return;
+    }
+
+    // Check if entry already exists
+    for (uint32_t i = 0; i < EXT2_INDEX_MAX_ENTRIES; i++) {
+        if (_ext2_index_entries[i].valid &&
+            _ext2_index_entries[i].inode == inode &&
+            _ext2_index_entries[i].parent_inode == parent_inode) {
+            return;
+        }
+    }
+
+    int32_t free_slot = -1;
+    for (uint32_t i = 0; i < EXT2_INDEX_MAX_ENTRIES; i++) {
+        if (!_ext2_index_entries[i].valid) {
+            free_slot = (int32_t)i;
+            break;
+        }
+    }
+    if (free_slot < 0) {
+        return;
+    }
+
+    struct EXT2IndexEntry *entry = &_ext2_index_entries[free_slot];
+    memset(entry, 0, sizeof(*entry));
+    entry->valid        = true;
+    entry->inode        = inode;
+    entry->parent_inode = parent_inode;
+    entry->file_type    = file_type;
+
+    uint8_t copy_len = name_len;
+    if (copy_len >= EXT2_INDEX_NAME_MAX) {
+        copy_len = EXT2_INDEX_NAME_MAX - 1u;
+    }
+    entry->name_len = copy_len;
+    memcpy(entry->name, name, copy_len);
+    entry->name[copy_len] = '\0';
+
+    // Build canonical path from parent path
+    const char *parent_path = ext2_index_get_path_by_inode(parent_inode);
+    uint32_t p_len = ext2_cstr_len(parent_path);
+    uint32_t pos = 0;
+    if (p_len == 1 && parent_path[0] == '/') {
+        entry->path[pos++] = '/';
+    } else {
+        for (uint32_t i = 0; i < p_len && pos + 1u < EXT2_INDEX_PATH_MAX; i++) {
+            entry->path[pos++] = parent_path[i];
+        }
+        if (pos + 1u < EXT2_INDEX_PATH_MAX) {
+            entry->path[pos++] = '/';
+        }
+    }
+    for (uint32_t i = 0; i < copy_len && pos + 1u < EXT2_INDEX_PATH_MAX; i++) {
+        entry->path[pos++] = entry->name[i];
+    }
+    entry->path[pos] = '\0';
+
+    entry->name_hash = ext2_hash_name(entry->name, entry->name_len);
+    uint32_t bucket  = entry->name_hash % EXT2_INDEX_HASH_BUCKETS;
+    entry->next_hash = _ext2_hash_head[bucket];
+    _ext2_hash_head[bucket] = (int16_t)free_slot;
+}
+
+void ext2_index_remove(
+    uint32_t inode,
+    uint32_t parent_inode,
+    const char *name,
+    uint8_t name_len
+) {
+    if (!_ext2_index_initialized) {
+        return;
+    }
+    (void)name;
+    (void)name_len;
+
+    for (uint32_t i = 0; i < EXT2_INDEX_MAX_ENTRIES; i++) {
+        if (!_ext2_index_entries[i].valid) {
+            continue;
+        }
+        if (_ext2_index_entries[i].inode == inode &&
+            (parent_inode == 0 || _ext2_index_entries[i].parent_inode == parent_inode)) {
+            uint32_t bucket = _ext2_index_entries[i].name_hash % EXT2_INDEX_HASH_BUCKETS;
+            int16_t cur = _ext2_hash_head[bucket];
+            int16_t prev = -1;
+            while (cur >= 0) {
+                if ((uint32_t)cur == i) {
+                    if (prev < 0) {
+                        _ext2_hash_head[bucket] = _ext2_index_entries[cur].next_hash;
+                    } else {
+                        _ext2_index_entries[prev].next_hash = _ext2_index_entries[cur].next_hash;
+                    }
+                    break;
+                }
+                prev = cur;
+                cur = _ext2_index_entries[cur].next_hash;
+            }
+            memset(&_ext2_index_entries[i], 0, sizeof(_ext2_index_entries[i]));
+            return;
+        }
+    }
+}
+
 struct EXT2FoundEntry {
     uint32_t block;
     uint16_t offset;
@@ -922,6 +1099,134 @@ void create_ext2(void)
     }
 }
 
+static void ext2_index_scan_dir_recursive(uint32_t dir_inode, uint32_t depth) {
+    if (depth >= 8u) {
+        return;
+    }
+    struct EXT2Inode node;
+    if (!read_inode(dir_inode, &node) || (node.i_mode & EXT2_MODE_MASK) != EXT2_S_IFDIR) {
+        return;
+    }
+    uint32_t block_count = (node.i_size + BLOCK_SIZE - 1u) / BLOCK_SIZE;
+    for (uint32_t b = 0; b < block_count; b++) {
+        uint32_t block = get_inode_data_block(&node, b);
+        if (block == 0 || block >= DISK_SPACE / BLOCK_SIZE) {
+            break;
+        }
+        struct BlockBuffer buffer;
+        read_blocks(&buffer, block, 1);
+        uint32_t offset = 0;
+        while (offset + sizeof(struct EXT2DirectoryEntry) <= BLOCK_SIZE) {
+            struct EXT2DirectoryEntry *entry = get_directory_entry(buffer.buf, offset);
+            if (entry->rec_len < sizeof(*entry) || offset + entry->rec_len > BLOCK_SIZE) {
+                break;
+            }
+            if (entry->inode != 0 && entry->name_len > 0) {
+                const char *ename = get_entry_name(entry);
+                bool is_dot = (entry->name_len == 1 && ename[0] == '.') ||
+                              (entry->name_len == 2 && ename[0] == '.' && ename[1] == '.');
+                if (!is_dot) {
+                    ext2_index_insert(
+                        entry->inode,
+                        dir_inode,
+                        ename,
+                        (uint8_t)entry->name_len,
+                        entry->file_type
+                    );
+                    if (entry->file_type == EXT2_FT_DIR) {
+                        ext2_index_scan_dir_recursive(entry->inode, depth + 1u);
+                    }
+                }
+            }
+            offset += entry->rec_len;
+        }
+    }
+}
+
+void ext2_index_rebuild(void) {
+    ext2_index_clear();
+    ext2_index_scan_dir_recursive(1u, 0);
+}
+
+static void idx_append_str(char *buf, uint32_t *pos, uint32_t max_size, const char *s) {
+    while (*s != '\0' && *pos + 1u < max_size) {
+        buf[(*pos)++] = *s++;
+    }
+}
+
+static void idx_append_u32(char *buf, uint32_t *pos, uint32_t max_size, uint32_t val) {
+    char tmp[12];
+    uint32_t len = 0;
+    do {
+        tmp[len++] = (char)('0' + (val % 10u));
+        val /= 10u;
+    } while (val != 0 && len < sizeof(tmp));
+    while (len > 0 && *pos + 1u < max_size) {
+        buf[(*pos)++] = tmp[--len];
+    }
+}
+
+static void idx_format_entry(
+    const struct EXT2IndexEntry *entry,
+    char *out_buffer,
+    uint32_t *pos,
+    uint32_t max_size
+) {
+    idx_append_str(out_buffer, pos, max_size, entry->path);
+    if (entry->file_type == EXT2_FT_DIR) {
+        idx_append_str(out_buffer, pos, max_size, "/");
+    }
+    idx_append_str(out_buffer, pos, max_size, " (inode ");
+    idx_append_u32(out_buffer, pos, max_size, entry->inode);
+    idx_append_str(out_buffer, pos, max_size, ")\n");
+}
+
+int32_t ext2_index_find(const char *pattern, char *out_buffer, uint32_t max_size) {
+    if (out_buffer == NULL || max_size == 0) {
+        return -1;
+    }
+    if (!_ext2_index_initialized) {
+        ext2_index_rebuild();
+    }
+
+    uint32_t pos = 0;
+    int32_t matches = 0;
+    uint32_t pat_len = ext2_cstr_len(pattern);
+
+    // 1. O(1) Hash Table bucket lookup for exact filename match
+    if (pat_len > 0 && pat_len < EXT2_INDEX_NAME_MAX) {
+        uint32_t h = ext2_hash_name(pattern, (uint8_t)pat_len);
+        int16_t cur = _ext2_hash_head[h % EXT2_INDEX_HASH_BUCKETS];
+        while (cur >= 0) {
+            const struct EXT2IndexEntry *e = &_ext2_index_entries[cur];
+            if (e->valid && e->name_len == pat_len && memcmp(e->name, pattern, pat_len) == 0) {
+                idx_format_entry(e, out_buffer, &pos, max_size);
+                matches++;
+            }
+            cur = e->next_hash;
+        }
+        if (matches > 0) {
+            out_buffer[pos] = '\0';
+            return matches;
+        }
+    }
+
+    // 2. In-memory index table scan for substring/path match (zero disk reads)
+    for (uint32_t i = 0; i < EXT2_INDEX_MAX_ENTRIES; i++) {
+        const struct EXT2IndexEntry *e = &_ext2_index_entries[i];
+        if (!e->valid) {
+            continue;
+        }
+        if (pat_len == 0 || ext2_substr_match(e->name, pattern) || ext2_substr_match(e->path, pattern)) {
+            idx_format_entry(e, out_buffer, &pos, max_size);
+            matches++;
+        }
+    }
+
+    out_buffer[pos] = '\0';
+    return matches;
+}
+
 void initialize_filesystem_ext2(void)
 {
     if (is_empty_storage()) {
@@ -930,6 +1235,7 @@ void initialize_filesystem_ext2(void)
         read_superblock(&_ext2_superblock);
         read_bgd_table(&_ext2_bgd_table);
     }
+    ext2_index_rebuild();
 }
 
 
@@ -1175,6 +1481,13 @@ int8_t write(struct EXT2DriverRequest *request)
 
     read_superblock(&_ext2_superblock);
     read_bgd_table(&_ext2_bgd_table);
+    ext2_index_insert(
+        new_inode_num,
+        request->parent_inode,
+        request->name,
+        request->name_len,
+        entry_file_type
+    );
     return SUCCESS;
 }
 
@@ -1342,5 +1655,11 @@ int8_t delete(struct EXT2DriverRequest request)
     if (!free_inode(found.inode)) {
         return ERR_UNKNOWN;
     }
+    ext2_index_remove(
+        found.inode,
+        request.parent_inode,
+        request.name,
+        request.name_len
+    );
     return SUCCESS;
 }

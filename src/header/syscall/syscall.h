@@ -22,6 +22,7 @@ struct EXT2DriverRequest;
 #define SYS_FILE_SIZE    12
 #define SYS_GET_RTC      13
 #define SYS_FIND_INDEX   14
+#define SYS_SHUTDOWN     15
 
 static inline int32_t system_call(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx) {
     int32_t ret;
@@ -74,6 +75,10 @@ static inline int32_t sys_kill(int32_t pid) {
 /* Baca waktu asli CMOS/RTC ke struct RTCTime (header/driver/cmos.h), return 0 jika sukses */
 static inline int32_t sys_get_rtc(void *rtc_time) {
     return system_call(SYS_GET_RTC, (uint32_t) rtc_time, 0, 0);
+}
+
+static inline void sys_shutdown(void) {
+    system_call(SYS_SHUTDOWN, 0, 0, 0);
 }
 
 #endif

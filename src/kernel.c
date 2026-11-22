@@ -15,7 +15,6 @@
 #include "header/kernel-entrypoint.h"
 #include "header/cpu/portio.h"
 
-#if DISK_DRIVER_SELF_TEST || FS_SELF_TEST || SWAP_SELF_TEST
 static void framebuffer_write_text(
     uint8_t row,
     uint8_t col,
@@ -28,7 +27,57 @@ static void framebuffer_write_text(
         ++text;
     }
 }
-#endif
+
+static void boot_delay_loops(uint32_t loops) {
+    for (volatile uint32_t i = 0; i < loops; ++i) {
+        __asm__ volatile("nop");
+    }
+}
+
+static void show_boot_splash_screen(void) {
+    static const char *logo[] = {
+        "   ____   _____                        ",
+        "  / __ \\ / ____|                       ",
+        " | |  | | (___   __ _ _ __ ___   __ _  ",
+        " | |  | |\\___ \\ / _` | '_ ` _ \\ / _` | ",
+        " | |__| |____) | (_| | | | | | | (_| | ",
+        "  \\____/|_____/ \\__,_|_| |_| |_|\\__,_| "
+    };
+
+    framebuffer_clear();
+    framebuffer_set_cursor(24, 79);
+
+    framebuffer_write_text(3, 18, "+------------------------------------------+", 0x08);
+    for (uint8_t i = 0; i < 6; ++i) {
+        framebuffer_write_text((uint8_t)(5 + i), 20, logo[i], (i < 3) ? 0x02 : 0x0F);
+    }
+    framebuffer_write_text(12, 21, "IF2130 x86 Protected Mode OS - 2026", 0x07);
+    framebuffer_write_text(14, 18, "+------------------------------------------+", 0x08);
+
+    const uint8_t bar_row = 17;
+    const uint8_t bar_col = 24;
+    const uint8_t total_steps = 28;
+
+    framebuffer_write(bar_row, bar_col, '[', 0x08, 0x00);
+    framebuffer_write(bar_row, (uint8_t)(bar_col + total_steps + 1), ']', 0x08, 0x00);
+
+    for (uint8_t step = 0; step < total_steps; ++step) {
+        if (step == 0) {
+            framebuffer_write_text(19, 22, "Loading GDT, IDT, TSS & Paging...     ", 0x08);
+        } else if (step == 10) {
+            framebuffer_write_text(19, 22, "Mounting EXT2 & Building Hash Index...", 0x08);
+        } else if (step == 20) {
+            framebuffer_write_text(19, 22, "Starting Preemptive Scheduler...      ", 0x02);
+        }
+        framebuffer_write(bar_row, (uint8_t)(bar_col + 1 + step), '#', 0x02, 0x00);
+        boot_delay_loops(2200000u);
+    }
+
+    framebuffer_write_text(19, 22, "System Ready. Launching User Shell... ", 0x0F);
+    boot_delay_loops(8000000u);
+    framebuffer_clear();
+    framebuffer_set_cursor(0, 0);
+}
 
 static void framebuffer_scroll(void) {
     uint8_t *video_memory = FRAMEBUFFER_MEMORY_OFFSET;
@@ -194,6 +243,7 @@ void kernel_setup(void) {
     initialize_filesystem_ext2();
     gdt_install_tss();
     set_tss_register();
+    show_boot_splash_screen();
     pit_initialize();
 
     for (uint32_t address = 0;

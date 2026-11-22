@@ -687,6 +687,8 @@ static void print_help(void) {
     print_text_color("show current date and time\n", COLOR_DARK_GRAY);
     print_text_color("  uptime                  ", COLOR_WHITE);
     print_text_color("show uptime in ms\n", COLOR_DARK_GRAY);
+    print_text_color("  shutdown                ", COLOR_WHITE);
+    print_text_color("power off system (ACPI 0x604)\n", COLOR_DARK_GRAY);
     print_text_color("  exit                    ", COLOR_WHITE);
     print_text_color("exit this process\n", COLOR_DARK_GRAY);
 }
@@ -792,6 +794,9 @@ static void parse_and_execute(char *line) {
         print_text_color("Uptime: ", COLOR_DARK_GRAY);
         print_number_color((uint32_t)call_syscall(SYS_GET_TIME, 0, 0, 0), COLOR_LIGHT_GRAY);
         print_text_color(" ms\n", COLOR_DARK_GRAY);
+    } else if (text_equal(command, "shutdown") && argument_count == 1) {
+        print_text_color("Shutting down OSama...\n", COLOR_ORANGE);
+        call_syscall(SYS_SHUTDOWN, 0, 0, 0);
     } else if (text_equal(command, "exit") && argument_count == 1) {
         call_syscall(SYS_EXIT, 0, 0, 0);
         print_error("exit: could not terminate process\n");

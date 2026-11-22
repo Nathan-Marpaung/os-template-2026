@@ -218,8 +218,9 @@ void page_fault_handler(uint32_t fault_address, uint32_t error_code) {
             return;
         }
 
-        bool demand_region = fault_address < USER_DEMAND_REGION_END || fault_address >= USER_STACK_DEMAND_START;
+        bool demand_region = fault_address < USER_DEMAND_REGION_END || fault_address >= USER_STACK_DEMAND_START || process_is_heap_adress(fault_address);
         if (!swapped && demand_region && paging_allocate_user_page_frame(page_dir, (void *) (fault_address & PAGE_MASK))) {
+            process_count_demand_page();
             return;
         }
     }

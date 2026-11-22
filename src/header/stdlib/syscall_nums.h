@@ -16,6 +16,8 @@
 #define SYSCALL_EXEC        11
 #define SYSCALL_KILL        12
 #define SYSCALL_PS          13
+#define SYSCALL_GET_TIME    20   // baru: ebx = pointer struct CMOSTime
+#define SYSCALL_PUTS_AT     21   // baru: ebx = string, ecx = panjang, edx = (row << 16) | (col << 8) | color
 
 #define PROCESS_INFO_NAME_MAX 32
 

@@ -10,6 +10,7 @@
 #include "header/process/process.h"
 #include "header/stdlib/string.h"
 #include "header/stdlib/syscall_nums.h"
+#include "header/driver/cmos.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -157,6 +158,20 @@ void syscall(struct InterruptFrame frame) {
             if (out_count != NULL) *out_count = count;
             break;
         }
+        case SYSCALL_GET_TIME:
+            if (frame.cpu.general.ebx < 0xC0000000)
+                cmos_read_time((struct CMOSTime*) frame.cpu.general.ebx);
+            break;
+        case SYSCALL_PUTS_AT:
+            if (frame.cpu.general.ebx < 0xC0000000)
+                framebuffer_puts_at(
+                    (frame.cpu.general.edx >> 16) & 0xFF,   // row
+                    (frame.cpu.general.edx >> 8)  & 0xFF,   // col
+                    (char*) frame.cpu.general.ebx,
+                    frame.cpu.general.ecx,
+                    frame.cpu.general.edx & 0xFF            // color
+                );
+            break;
     }
 }
 

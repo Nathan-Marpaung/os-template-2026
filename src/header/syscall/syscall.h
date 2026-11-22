@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+struct EXT2DriverRequest;
+
 #define SYS_READ           0
 #define SYS_WRITE          1
 #define SYS_READ_DIR       2
@@ -46,6 +48,14 @@ static inline void sys_clear_screen(void) {
 
 static inline int32_t sys_exec(struct EXT2DriverRequest *request) {
     return system_call(SYS_EXEC, (uint32_t) request, 0, 0);
+}
+
+static inline int32_t sys_exec_args(
+    struct EXT2DriverRequest *request,
+    uint32_t argc,
+    char *const argv[]
+) {
+    return system_call(SYS_EXEC, (uint32_t)request, argc, (uint32_t)argv);
 }
 
 static inline void sys_exit(void) {

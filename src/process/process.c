@@ -20,6 +20,14 @@ static uint32_t ceil_div(uint32_t a, uint32_t b) {
     return (a + b - 1u) / b;
 }
 
+static uint32_t str_length(const char *s) {
+    uint32_t len = 0;
+    while (s[len] != '\0') {
+        len++;
+    }
+    return len;
+}
+
 static int32_t process_list_get_inactive_index(void) {
     for (int32_t i = 0; i < PROCESS_COUNT_MAX; i++) {
         if (_process_list[i].metadata.state == PROCESS_STATE_INACTIVE) {
@@ -49,6 +57,14 @@ struct ProcessControlBlock* process_get_current_running_pcb_pointer(void) {
 }
 
 int32_t process_create_user_process(struct EXT2DriverRequest request) {
+    return process_create_user_process_args(request, 0, NULL);
+}
+
+int32_t process_create_user_process_args(
+    struct EXT2DriverRequest request,
+    uint32_t argc,
+    const char *const *argv
+) {
     int32_t retcode = PROCESS_CREATE_SUCCESS;
     if (process_manager_state.active_process_count >= PROCESS_COUNT_MAX) {
         retcode = PROCESS_CREATE_FAIL_MAX_PROCESS_EXCEEDED;
@@ -89,6 +105,33 @@ int32_t process_create_user_process(struct EXT2DriverRequest request) {
     }
     if (request.name != NULL && copy_len > 0) {
         memcpy(exec_name, request.name, copy_len);
+    }
+
+    // Copy command-line arguments from caller's address space into kernel stack before switching CR3
+    char k_args[PROCESS_ARG_MAX_COUNT][PROCESS_ARG_MAX_LEN];
+    memset(k_args, 0, sizeof(k_args));
+    uint32_t k_argc = 0;
+    if (argv != NULL && argc > 0) {
+        if (argc > PROCESS_ARG_MAX_COUNT) {
+            argc = PROCESS_ARG_MAX_COUNT;
+        }
+        for (uint32_t i = 0; i < argc; i++) {
+            const char *src = argv[i];
+            if (src == NULL) {
+                break;
+            }
+            uint32_t j = 0;
+            while (src[j] != '\0' && j + 1u < PROCESS_ARG_MAX_LEN) {
+                k_args[k_argc][j] = src[j];
+                j++;
+            }
+            k_args[k_argc][j] = '\0';
+            k_argc++;
+        }
+    }
+    if (k_argc == 0) {
+        memcpy(k_args[0], exec_name, PROCESS_NAME_LENGTH_MAX);
+        k_argc = 1;
     }
 
     // 1. Create new virtual address space with page directory
@@ -156,13 +199,40 @@ int32_t process_create_user_process(struct EXT2DriverRequest request) {
         goto exit_cleanup;
     }
 
-    // 5. Restore previous virtual address space after loading executable
+    // Populate argc, argv[], and argument strings at the top of the new process's user stack
+    uint32_t sp = PROCESS_USER_STACK_PAGE_VIRTUAL_ADDR + PAGE_FRAME_SIZE;
+    uint32_t u_arg_ptrs[PROCESS_ARG_MAX_COUNT];
+    for (uint32_t i = k_argc; i > 0; i--) {
+        uint32_t idx = i - 1u;
+        uint32_t len = str_length(k_args[idx]) + 1u;
+        sp -= len;
+        memcpy((void *)sp, k_args[idx], len);
+        u_arg_ptrs[idx] = sp;
+    }
+    sp &= ~0x3u;
+
+    // Push NULL terminator for argv[argc] and argv[0..argc-1] pointers
+    sp -= sizeof(uint32_t);
+    *(volatile uint32_t *)sp = 0;
+    for (uint32_t i = k_argc; i > 0; i--) {
+        sp -= sizeof(uint32_t);
+        *(volatile uint32_t *)sp = u_arg_ptrs[i - 1u];
+    }
+    uint32_t u_argv_ptr = sp;
+
+    // Push argv pointer ([esp + 4]) and argc ([esp]) for user/crt0.s _start
+    sp -= sizeof(uint32_t);
+    *(volatile uint32_t *)sp = u_argv_ptr;
+    sp -= sizeof(uint32_t);
+    *(volatile uint32_t *)sp = k_argc;
+
+    // 5. Restore previous virtual address space after loading executable and user stack
     paging_use_page_directory(old_page_dir);
 
     // 3. Setup initial Context for the new user process
     uint32_t user_data_segment = GDT_USER_DATA_SEGMENT_SELECTOR | 0x3u;
-    new_pcb->context.cpu.stack.ebp              = PROCESS_USER_STACK_TOP_VIRTUAL_ADDR;
-    new_pcb->context.cpu.stack.esp              = PROCESS_USER_STACK_TOP_VIRTUAL_ADDR;
+    new_pcb->context.cpu.stack.ebp              = sp;
+    new_pcb->context.cpu.stack.esp              = sp;
     new_pcb->context.cpu.segment.gs             = user_data_segment;
     new_pcb->context.cpu.segment.fs             = user_data_segment;
     new_pcb->context.cpu.segment.es             = user_data_segment;

@@ -217,7 +217,7 @@ insert-grow: inserter user-grow
 	@cd $(OUTPUT_FOLDER); ./inserter -f grow 1 storage.bin
 
 # Masukkan semua user program (shell, hello, clock, args-demo, grow) ke storage.bin
-insert-all: insert-shell insert-hello insert-clock insert-args insert-grow
+insert-all: insert-shell insert-hello insert-clock insert-args insert-grow insert-beep
 
 # Setup pertama kali: disk baru + semua program, lalu build kernel
 setup: clean disk insert-all build

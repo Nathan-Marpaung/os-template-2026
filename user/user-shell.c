@@ -3,12 +3,14 @@
 #include "header/filesystem/ext2.h"
 #include "header/syscall/syscall.h"
 #include "header/driver/cmos.h"
+#include "header/driver/keyboard.h"
 
 #define MAX_INPUT_SIZE 256u
 #define MAX_PATH_SIZE 128u
 #define MAX_DIRECTORY_SIZE (2u * BLOCK_SIZE)
 #define MAX_FILE_SIZE 8192u
 #define MAX_FIND_DEPTH 8u
+#define MAX_HISTORY_SIZE 16u
 
 #define COLOR_BLACK         0x00
 #define COLOR_BLUE          0x01
@@ -31,6 +33,9 @@ static uint32_t current_directory = 1u;
 static uint8_t directory_buffer[MAX_DIRECTORY_SIZE];
 static uint8_t file_buffer[MAX_FILE_SIZE];
 static char process_buffer[512];
+static char command_history[MAX_HISTORY_SIZE][MAX_INPUT_SIZE];
+static uint32_t command_history_count = 0;
+static uint32_t command_history_position = 0;
 
 static uint32_t text_length(const char *text) {
     uint32_t length = 0;
@@ -186,12 +191,85 @@ static void print_prompt(void) {
     print_text_color("$ ", COLOR_WHITE);
 }
 
+static void history_add(const char *command) {
+    if (command[0] == '\0') {
+        return;
+    }
+    if (command_history_count > 0 &&
+        text_equal(command_history[command_history_count - 1u], command)) {
+        return;
+    }
+
+    if (command_history_count < MAX_HISTORY_SIZE) {
+        copy_text(
+            command_history[command_history_count],
+            command,
+            MAX_INPUT_SIZE
+        );
+        command_history_count++;
+    } else {
+        for (uint32_t index = 1u; index < MAX_HISTORY_SIZE; index++) {
+            copy_text(
+                command_history[index - 1u],
+                command_history[index],
+                MAX_INPUT_SIZE
+            );
+        }
+        copy_text(
+            command_history[MAX_HISTORY_SIZE - 1u],
+            command,
+            MAX_INPUT_SIZE
+        );
+    }
+}
+
+static uint32_t replace_input_line(char *buffer,
+                                   uint32_t index,
+                                   const char *replacement) {
+    while (index > 0u) {
+        index--;
+        print_text("\b \b");
+    }
+
+    copy_text(buffer, replacement, MAX_INPUT_SIZE);
+    index = text_length(buffer);
+    print_text(buffer);
+    return index;
+}
+
 static void read_line(char *buffer) {
     uint32_t index = 0;
+    command_history_position = command_history_count;
     while (true) {
         int32_t key = call_syscall(SYS_GETKEY, 0, 0, 0);
         char character = (char)key;
         if (character == '\0') {
+            continue;
+        }
+        if (character == (char)KEY_UP) {
+            if (command_history_position > 0u) {
+                command_history_position--;
+                index = replace_input_line(
+                    buffer,
+                    index,
+                    command_history[command_history_position]
+                );
+            }
+            continue;
+        }
+        if (character == (char)KEY_DOWN) {
+            if (command_history_position < command_history_count) {
+                command_history_position++;
+                if (command_history_position < command_history_count) {
+                    index = replace_input_line(
+                        buffer,
+                        index,
+                        command_history[command_history_position]
+                    );
+                } else {
+                    index = replace_input_line(buffer, index, "");
+                }
+            }
             continue;
         }
         if (character == '\n' || character == '\r') {
@@ -811,6 +889,7 @@ int main(void) {
     while (true) {
         print_prompt();
         read_line(input_buffer);
+        history_add(input_buffer);
         parse_and_execute(input_buffer);
     }
     return 0;

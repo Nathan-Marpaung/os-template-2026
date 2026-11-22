@@ -11,6 +11,11 @@
 #define EXT_SCANCODE_LEFT      0x4B
 #define EXT_SCANCODE_RIGHT     0x4D
 
+#define KEY_UP                 0x11
+#define KEY_DOWN               0x12
+#define KEY_LEFT               0x13
+#define KEY_RIGHT              0x14
+
 #define KEYBOARD_DATA_PORT     0x60
 #define EXTENDED_SCANCODE_BYTE 0xE0
 

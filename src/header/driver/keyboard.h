@@ -15,6 +15,8 @@
 #define KEY_DOWN               0x12
 #define KEY_LEFT               0x13
 #define KEY_RIGHT              0x14
+#define KEY_PAGE_UP            0x15
+#define KEY_PAGE_DOWN          0x16
 
 #define KEYBOARD_DATA_PORT     0x60
 #define EXTENDED_SCANCODE_BYTE 0xE0

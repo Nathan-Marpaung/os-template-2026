@@ -21,6 +21,7 @@ struct EXT2DriverRequest;
 #define SYS_GET_TIME     11
 #define SYS_FILE_SIZE    12
 #define SYS_GET_RTC      13
+#define SYS_SCROLL         16
 #define SYS_FIND_INDEX   14
 #define SYS_SHUTDOWN     15
 

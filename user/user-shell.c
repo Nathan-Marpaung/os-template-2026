@@ -37,6 +37,10 @@ static char command_history[MAX_HISTORY_SIZE][MAX_INPUT_SIZE];
 static uint32_t command_history_count = 0;
 static uint32_t command_history_position = 0;
 
+static char pipe_buffer[512];
+static uint32_t pipe_pos = 0;
+static bool pipe_mode = false;
+
 static uint32_t text_length(const char *text) {
     uint32_t length = 0;
     while (text[length] != '\0') {
@@ -108,6 +112,12 @@ static int32_t call_syscall(uint32_t number,
 }
 
 static void print_char_color(char character, uint8_t color) {
+    if (pipe_mode) {
+        if (pipe_pos < sizeof(pipe_buffer) - 1u) {
+            pipe_buffer[pipe_pos++] = character;
+        }
+        return;
+    }
     call_syscall(SYS_PUTCHAR, (uint32_t)(uint8_t)character, (uint32_t)color, 0);
 }
 
@@ -742,6 +752,26 @@ static void command_grep(const char *pattern, const char *path) {
     }
 }
 
+static void command_grep_buffer(const char *pattern) {
+    uint32_t size = pipe_pos;
+    uint32_t line_start = 0;
+    while (line_start < size) {
+        uint32_t line_end = line_start;
+        while (line_end < size && pipe_buffer[line_end] != '\n') {
+            line_end++;
+        }
+
+        uint32_t length = line_end - line_start;
+        if (range_contains((const uint8_t *)(pipe_buffer + line_start), length, pattern)) {
+            for (uint32_t i = 0; i < length; i++) {
+                print_file_char(pipe_buffer[line_start + i]);
+            }
+            print_char('\n');
+        }
+        line_start = line_end + (line_end < size ? 1u : 0u);
+    }
+}
+
 static void print_help(void) {
     print_text_color("Commands:\n", COLOR_GREEN);
     print_text_color("  help                    ", COLOR_WHITE);
@@ -784,70 +814,46 @@ static void print_help(void) {
     print_text_color("exit this process\n", COLOR_DARK_GRAY);
 }
 
-static void parse_and_execute(char *line) {
-    char *arguments[8];
-    uint32_t argument_count = 0;
-    uint32_t index = 0;
-
-    while (line[index] != '\0') {
-        while (line[index] == ' ' || line[index] == '\t') {
-            line[index++] = '\0';
-        }
-        if (line[index] == '\0') {
-            break;
-        }
-        if (argument_count == sizeof(arguments) / sizeof(arguments[0])) {
-            print_error("Too many arguments\n");
-            return;
-        }
-        arguments[argument_count++] = &line[index];
-        while (line[index] != '\0' && line[index] != ' ' && line[index] != '\t') {
-            index++;
-        }
-    }
-    if (argument_count == 0) {
-        return;
-    }
-
-    const char *command = arguments[0];
+static void execute_command(char *argv[], uint32_t argc) {
+    const char *command = argv[0];
     if (text_equal(command, "help")) {
         print_help();
     } else if (text_equal(command, "clear")) {
         call_syscall(SYS_CLEAR_SCREEN, 0, 0, 0);
     } else if (text_equal(command, "ls")) {
         uint32_t inode = current_directory;
-        if (argument_count > 1 &&
-            !resolve_directory_path(arguments[1], &inode)) {
+        if (argc > 1 &&
+            !resolve_directory_path(argv[1], &inode)) {
             print_error("ls: directory not found\n");
         } else {
             list_directory(inode);
         }
     } else if (text_equal(command, "cd")) {
-        if (argument_count == 1) {
+        if (argc == 1) {
             current_directory = 1u;
-        } else if (!resolve_directory_path(arguments[1], &current_directory)) {
+        } else if (!resolve_directory_path(argv[1], &current_directory)) {
             print_error("cd: directory not found\n");
         }
-    } else if (text_equal(command, "mkdir") && argument_count == 2) {
-        command_mkdir(arguments[1]);
-    } else if (text_equal(command, "rmdir") && argument_count == 2) {
-        command_remove(arguments[1], true);
-    } else if (text_equal(command, "rm") && argument_count == 2) {
-        command_remove(arguments[1], false);
-    } else if (text_equal(command, "cat") && argument_count == 2) {
-        command_cat(arguments[1]);
-    } else if (text_equal(command, "cp") && argument_count == 3) {
-        command_copy(arguments[1], arguments[2]);
-    } else if (text_equal(command, "mv") && argument_count == 3) {
-        command_move(arguments[1], arguments[2]);
-    } else if (text_equal(command, "find") && argument_count <= 3) {
+    } else if (text_equal(command, "mkdir") && argc == 2) {
+        command_mkdir(argv[1]);
+    } else if (text_equal(command, "rmdir") && argc == 2) {
+        command_remove(argv[1], true);
+    } else if (text_equal(command, "rm") && argc == 2) {
+        command_remove(argv[1], false);
+    } else if (text_equal(command, "cat") && argc == 2) {
+        command_cat(argv[1]);
+    } else if (text_equal(command, "cp") && argc == 3) {
+        command_copy(argv[1], argv[2]);
+    } else if (text_equal(command, "mv") && argc == 3) {
+        command_move(argv[1], argv[2]);
+    } else if (text_equal(command, "find") && argc <= 3) {
         const char *pattern = NULL;
-        if (argument_count == 2) {
-            pattern = text_equal(arguments[1], ".") || text_equal(arguments[1], "/")
+        if (argc == 2) {
+            pattern = text_equal(argv[1], ".") || text_equal(argv[1], "/")
                 ? ""
-                : arguments[1];
-        } else if (argument_count == 3) {
-            pattern = arguments[2];
+                : argv[1];
+        } else if (argc == 3) {
+            pattern = argv[2];
         } else {
             pattern = "";
         }
@@ -863,36 +869,105 @@ static void parse_and_execute(char *line) {
         } else {
             print_error("find: no matching files in index\n");
         }
-    } else if (text_equal(command, "grep") && argument_count == 3) {
-        command_grep(arguments[1], arguments[2]);
-    } else if (text_equal(command, "ps") && argument_count == 1) {
+    } else if (text_equal(command, "grep") && argc >= 2) {
+        if (argc == 2) {
+            command_grep_buffer(argv[1]);
+        } else {
+            command_grep(argv[1], argv[2]);
+        }
+    } else if (text_equal(command, "ps") && argc == 1) {
         process_buffer[0] = '\0';
         if (call_syscall(SYS_PS, (uint32_t)process_buffer,
                          sizeof(process_buffer), 0) == 0) {
             print_text_color(process_buffer, COLOR_LIGHT_GRAY);
         }
-    } else if (text_equal(command, "kill") && argument_count == 2) {
+    } else if (text_equal(command, "kill") && argc == 2) {
         uint32_t pid;
-        if (!parse_number(arguments[1], &pid) ||
+        if (!parse_number(argv[1], &pid) ||
             call_syscall(SYS_KILL, pid, 0, 0) != 0) {
             print_error("kill: invalid or inactive PID\n");
         }
-    } else if (text_equal(command, "exec") && argument_count >= 2) {
-        command_exec(argument_count - 1u, &arguments[1]);
-    } else if (text_equal(command, "time") && argument_count == 1) {
+    } else if (text_equal(command, "exec") && argc >= 2) {
+        command_exec(argc - 1u, &argv[1]);
+    } else if (text_equal(command, "time") && argc == 1) {
         command_time();
-    } else if (text_equal(command, "uptime") && argument_count == 1) {
+    } else if (text_equal(command, "uptime") && argc == 1) {
         print_text_color("Uptime: ", COLOR_DARK_GRAY);
         print_number_color((uint32_t)call_syscall(SYS_GET_TIME, 0, 0, 0), COLOR_LIGHT_GRAY);
         print_text_color(" ms\n", COLOR_DARK_GRAY);
-    } else if (text_equal(command, "shutdown") && argument_count == 1) {
+    } else if (text_equal(command, "shutdown") && argc == 1) {
         print_text_color("Shutting down OSama...\n", COLOR_ORANGE);
         call_syscall(SYS_SHUTDOWN, 0, 0, 0);
-    } else if (text_equal(command, "exit") && argument_count == 1) {
+    } else if (text_equal(command, "exit") && argc == 1) {
         call_syscall(SYS_EXIT, 0, 0, 0);
         print_error("exit: could not terminate process\n");
     } else {
         print_error("Unknown command or invalid arguments. Type 'help'.\n");
+    }
+}
+
+static void parse_and_execute(char *line) {
+    char *segments[8];
+    uint32_t segment_count = 0;
+
+    segments[segment_count++] = line;
+    char *ptr = line;
+    while (*ptr != '\0') {
+        if (*ptr == '|') {
+            *ptr = '\0';
+            ptr++;
+            while (*ptr == ' ') {
+                ptr++;
+            }
+            if (*ptr != '\0' &&
+                segment_count < sizeof(segments) / sizeof(segments[0])) {
+                segments[segment_count++] = ptr;
+            }
+        } else {
+            ptr++;
+        }
+    }
+
+    for (uint32_t i = 0; i < segment_count; i++) {
+        char *segment = segments[i];
+        while (*segment == ' ' || *segment == '\t') {
+            segment++;
+        }
+
+        char *args[8];
+        uint32_t argc = 0;
+        char *p = segment;
+        while (*p != '\0') {
+            while (*p == ' ' || *p == '\t') {
+                *p++ = '\0';
+            }
+            if (*p == '\0') {
+                break;
+            }
+            if (argc == sizeof(args) / sizeof(args[0])) {
+                print_error("Too many arguments\n");
+                return;
+            }
+            args[argc++] = p;
+            while (*p != '\0' && *p != ' ' && *p != '\t') {
+                p++;
+            }
+        }
+        if (argc == 0) {
+            continue;
+        }
+
+        bool is_last = (i == segment_count - 1);
+        if (!is_last) {
+            pipe_mode = true;
+            pipe_pos = 0;
+        }
+
+        execute_command(args, argc);
+
+        if (!is_last) {
+            pipe_mode = false;
+        }
     }
 }
 

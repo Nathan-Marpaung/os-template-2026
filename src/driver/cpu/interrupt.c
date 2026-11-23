@@ -11,6 +11,7 @@
 #include "header/process/process.h"
 #include "header/scheduler/scheduler.h"
 #include "header/driver/cmos.h"
+#include "header/driver/pc_speaker.h"
 
 struct TSSEntry _interrupt_tss_entry = {
     .ss0 = GDT_KERNEL_DATA_SEGMENT_SELECTOR,
@@ -319,6 +320,13 @@ void handle_syscall(struct InterruptFrame *frame) {
         case SYS_FREE: {
             void *ptr = (void *)frame->cpu.general.ebx;
             frame->cpu.general.eax = heap_free(ptr) ? 0u : (uint32_t)-1;
+            break;
+        }
+        case SYS_PC_SPEAKER: {
+            uint32_t frequency_hz = frame->cpu.general.ebx;
+            uint32_t duration_ms = frame->cpu.general.ecx;
+            pc_speaker_play_frequency(frequency_hz, duration_ms);
+            frame->cpu.general.eax = 0;
             break;
         }
         case SYS_CLEAR_SCREEN:

@@ -29,6 +29,7 @@ struct EXT2DriverRequest;
 #define SYS_GET_KEY_STATUS 19
 #define SYS_MALLOC         20
 #define SYS_FREE           21
+#define SYS_PC_SPEAKER     22
 
 /* SYS_GET_KEY_STATUS return flags (also cleared once read) */
 #define SYS_KEY_STATUS_CTRL_C    0x01u
@@ -137,6 +138,16 @@ static inline void *sys_malloc(uint32_t size) {
  */
 static inline void sys_free(void *ptr) {
     system_call(SYS_FREE, (uint32_t)ptr, 0, 0);
+}
+
+/**
+ * Drive the PC speaker from user-space.
+ *
+ * @param frequency_hz Tone pitch in Hz; 0 silences the speaker.
+ * @param duration_ms  Playback length in milliseconds.
+ */
+static inline void sys_pc_speaker(uint32_t frequency_hz, uint32_t duration_ms) {
+    system_call(SYS_PC_SPEAKER, frequency_hz, duration_ms, 0);
 }
 
 #endif

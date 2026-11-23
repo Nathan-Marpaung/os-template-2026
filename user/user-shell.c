@@ -248,6 +248,7 @@ static void read_line(char *buffer) {
         }
         if (character == (char)KEY_UP) {
             if (command_history_position > 0u) {
+                call_syscall(SYS_SCROLL, 3u, 0, 0);
                 command_history_position--;
                 index = replace_input_line(
                     buffer,
@@ -259,6 +260,7 @@ static void read_line(char *buffer) {
         }
         if (character == (char)KEY_DOWN) {
             if (command_history_position < command_history_count) {
+                call_syscall(SYS_SCROLL, 3u, 0, 0);
                 command_history_position++;
                 if (command_history_position < command_history_count) {
                     index = replace_input_line(
@@ -272,13 +274,23 @@ static void read_line(char *buffer) {
             }
             continue;
         }
+        if (character == (char)KEY_PAGE_UP) {
+            call_syscall(SYS_SCROLL, 1u, 0, 0);
+            continue;
+        }
+        if (character == (char)KEY_PAGE_DOWN) {
+            call_syscall(SYS_SCROLL, 2u, 0, 0);
+            continue;
+        }
         if (character == '\n' || character == '\r') {
+            call_syscall(SYS_SCROLL, 3u, 0, 0);
             print_text("\n");
             buffer[index] = '\0';
             return;
         }
         if (character == '\b') {
             if (index > 0) {
+                call_syscall(SYS_SCROLL, 3u, 0, 0);
                 index--;
                 print_text("\b \b");
             }
@@ -286,6 +298,7 @@ static void read_line(char *buffer) {
         }
         if (character >= ' ' && character <= '~' &&
             index + 1u < MAX_INPUT_SIZE) {
+            call_syscall(SYS_SCROLL, 3u, 0, 0);
             buffer[index] = character;
             index++;
             print_char_color(character, COLOR_WHITE);

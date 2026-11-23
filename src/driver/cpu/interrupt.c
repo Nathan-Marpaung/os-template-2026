@@ -272,6 +272,23 @@ void handle_syscall(struct InterruptFrame *frame) {
             );
             frame->cpu.general.eax = 0;
             break;
+        case SYS_FB_PUTCHAR:
+            framebuffer_write(
+                (uint8_t)frame->cpu.general.ebx,
+                (uint8_t)(frame->cpu.general.ecx >> 8),
+                (char)(frame->cpu.general.ecx & 0xFFu),
+                (uint8_t)frame->cpu.general.edx,
+                0x00u
+            );
+            frame->cpu.general.eax = 0;
+            break;
+        case SYS_FB_SET_CURSOR:
+            framebuffer_set_cursor(
+                (uint8_t)frame->cpu.general.ebx,
+                (uint8_t)frame->cpu.general.ecx
+            );
+            frame->cpu.general.eax = 0;
+            break;
         case SYS_GETKEY: {
             char key = 0;
             get_keyboard_buffer(&key);

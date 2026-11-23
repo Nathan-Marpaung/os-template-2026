@@ -22,8 +22,10 @@ struct EXT2DriverRequest;
 #define SYS_FILE_SIZE    12
 #define SYS_GET_RTC      13
 #define SYS_SCROLL         16
-#define SYS_FIND_INDEX   14
-#define SYS_SHUTDOWN     15
+#define SYS_FIND_INDEX     14
+#define SYS_SHUTDOWN       15
+#define SYS_FB_PUTCHAR     17
+#define SYS_FB_SET_CURSOR  18
 
 static inline int32_t system_call(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx) {
     int32_t ret;
@@ -80,6 +82,24 @@ static inline int32_t sys_get_rtc(void *rtc_time) {
 
 static inline void sys_shutdown(void) {
     system_call(SYS_SHUTDOWN, 0, 0, 0);
+}
+
+static inline void sys_fb_putchar(
+    uint8_t row,
+    uint8_t col,
+    char c,
+    uint8_t color
+) {
+    system_call(
+        SYS_FB_PUTCHAR,
+        (uint32_t)row,
+        ((uint32_t)col << 8) | (uint32_t)(uint8_t)c,
+        (uint32_t)color
+    );
+}
+
+static inline void sys_fb_set_cursor(uint8_t row, uint8_t col) {
+    system_call(SYS_FB_SET_CURSOR, (uint32_t)row, (uint32_t)col, 0);
 }
 
 #endif

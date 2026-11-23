@@ -445,6 +445,8 @@ static void print_text(const char *text) {
 }
 
 static void print_error(const char *text) {
+    /* Audible feedback for shell errors (PC speaker bonus). */
+    sys_pc_speaker(196u, 140u);
     print_text_color(text, COLOR_RED);
 }
 

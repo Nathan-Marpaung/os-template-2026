@@ -33,7 +33,10 @@
 
 static uint32_t current_directory = 1u;
 static char current_path[MAX_PATH_SIZE] = "/";
-static char path_env[MAX_PATH_SIZE] = "/bin";
+/* PATH is stored in a heap-allocated, growable buffer (dynamic array) instead
+ * of a fixed-size static array, so it can grow without a static limit. */
+static char *path_env = NULL;
+static uint32_t path_env_len = 0;
 static uint8_t directory_buffer[MAX_DIRECTORY_SIZE];
 static uint8_t file_buffer[MAX_FILE_SIZE];
 static char process_buffer[512];
@@ -89,6 +92,34 @@ static int32_t search_path(const char *cmd, char *out_path,
 static void command_export(uint32_t argc, char *argv[]);
 static void path_save(void);
 static void path_load(void);
+
+/* Replace the heap-backed PATH buffer with a copy of `value`. Frees the old
+ * buffer and updates path_env_len. Returns false if allocation fails (old
+ * buffer is left untouched in that case). */
+static bool path_env_set(const char *value) {
+    uint32_t len = text_length(value);
+    char *fresh = (char *)sys_malloc(len + 1u);
+    if (fresh == NULL) {
+        return false;
+    }
+    for (uint32_t i = 0; i < len; i++) {
+        fresh[i] = value[i];
+    }
+    fresh[len] = '\0';
+    if (path_env != NULL) {
+        sys_free(path_env);
+    }
+    path_env = fresh;
+    path_env_len = len;
+    return true;
+}
+
+/* Ensure PATH has a default value before path_load() runs. */
+static void path_env_init(void) {
+    if (path_env == NULL) {
+        (void)path_env_set("/bin");
+    }
+}
 
 static void update_current_path(const char *path) {
     char resolved[MAX_PATH_SIZE];
@@ -226,19 +257,30 @@ static void command_export(uint32_t argc, char *argv[]) {
             return;
         }
         uint32_t len = text_length(path_env);
-        if (len > 0 && path_env[len - 1] != ':') {
-            if (len + 1u < MAX_PATH_SIZE) {
-                path_env[len++] = ':';
-            }
-        }
         uint32_t dir_len = text_length(argv[2]);
-        if (len + dir_len + 1u < MAX_PATH_SIZE) {
-            for (uint32_t i = 0; i < dir_len; i++) {
-                path_env[len++] = argv[2][i];
-            }
+        char *new_path = (char *)sys_malloc(len + dir_len + 2u);
+        if (new_path == NULL) {
+            print_error("export: allocation failed\n");
+            return;
         }
-        path_env[len] = '\0';
-        path_save();
+        uint32_t nlen = 0;
+        for (uint32_t i = 0; i < len; i++) {
+            new_path[nlen++] = path_env[i];
+        }
+        if (nlen > 0 && new_path[nlen - 1] != ':') {
+            new_path[nlen++] = ':';
+        }
+        for (uint32_t i = 0; i < dir_len; i++) {
+            new_path[nlen++] = argv[2][i];
+        }
+        new_path[nlen] = '\0';
+        bool ok = path_env_set(new_path);
+        sys_free(new_path);
+        if (ok) {
+            path_save();
+        } else {
+            print_error("export: allocation failed\n");
+        }
     } else if (argc == 3 && text_equal(argv[1], "remove")) {
         char new_path[MAX_PATH_SIZE];
         uint32_t nlen = 0;
@@ -268,7 +310,7 @@ static void command_export(uint32_t argc, char *argv[]) {
         }
         new_path[nlen] = '\0';
         if (found) {
-            copy_text(path_env, new_path, MAX_PATH_SIZE);
+            (void)path_env_set(new_path);
             path_save();
         } else {
             print_error("export: directory not in PATH\n");
@@ -284,7 +326,7 @@ static void path_save(void) {
     if (!resolve_file_path("/path.env", &parent_inode, name)) {
         return;
     }
-    uint32_t len = text_length(path_env);
+    uint32_t len = path_env_len;
     if (len == 0 || len > MAX_FILE_SIZE) {
         return;
     }
@@ -296,11 +338,11 @@ static void path_load(void) {
     char name[MAX_PATH_SIZE];
     uint32_t size;
     if (!read_file("/path.env", &parent_inode, name, &size) || size == 0 ||
-        size > MAX_PATH_SIZE) {
+        size > MAX_FILE_SIZE) {
         return;
     }
     file_buffer[size] = '\0';
-    copy_text(path_env, (char *)file_buffer, MAX_PATH_SIZE);
+    (void)path_env_set((char *)file_buffer);
 }
 
 static uint32_t text_length(const char *text) {
@@ -1280,6 +1322,7 @@ static void parse_and_execute(char *line) {
 }
 
 int main(void) {
+    path_env_init();
     path_load();
     print_text_color("Welcome to OSama\n", COLOR_BLUE);
     output_flush();

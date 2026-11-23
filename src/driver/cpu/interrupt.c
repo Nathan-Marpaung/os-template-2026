@@ -5,6 +5,7 @@
 #include "header/cpu/gdt.h"
 #include "header/memory/swap.h"
 #include "header/memory/paging.h"
+#include "header/memory/heap.h"
 #include "header/filesystem/ext2.h"
 #include "header/syscall/syscall.h"
 #include "header/process/process.h"
@@ -307,6 +308,17 @@ void handle_syscall(struct InterruptFrame *frame) {
                 status |= SYS_KEY_STATUS_CTRL_HELD;
             }
             frame->cpu.general.eax = status;
+            break;
+        }
+        case SYS_MALLOC: {
+            uint32_t size = frame->cpu.general.ebx;
+            void *ptr = heap_malloc(size);
+            frame->cpu.general.eax = (uint32_t)ptr;
+            break;
+        }
+        case SYS_FREE: {
+            void *ptr = (void *)frame->cpu.general.ebx;
+            frame->cpu.general.eax = heap_free(ptr) ? 0u : (uint32_t)-1;
             break;
         }
         case SYS_CLEAR_SCREEN:

@@ -27,6 +27,8 @@ struct EXT2DriverRequest;
 #define SYS_FB_PUTCHAR     17
 #define SYS_FB_SET_CURSOR  18
 #define SYS_GET_KEY_STATUS 19
+#define SYS_MALLOC         20
+#define SYS_FREE           21
 
 /* SYS_GET_KEY_STATUS return flags (also cleared once read) */
 #define SYS_KEY_STATUS_CTRL_C    0x01u
@@ -116,6 +118,25 @@ static inline void sys_fb_set_cursor(uint8_t row, uint8_t col) {
  */
 static inline uint32_t sys_get_key_status(void) {
     return (uint32_t)system_call(SYS_GET_KEY_STATUS, 0, 0, 0);
+}
+
+/**
+ * Allocate `size` bytes from the calling process' kernel heap.
+ *
+ * @param size Requested payload size in bytes.
+ * @return Pointer to the allocated memory, or NULL on failure.
+ */
+static inline void *sys_malloc(uint32_t size) {
+    return (void *)(uint32_t)system_call(SYS_MALLOC, size, 0, 0);
+}
+
+/**
+ * Release memory previously returned by sys_malloc().
+ *
+ * @param ptr Pointer to free; NULL is a no-op.
+ */
+static inline void sys_free(void *ptr) {
+    system_call(SYS_FREE, (uint32_t)ptr, 0, 0);
 }
 
 #endif

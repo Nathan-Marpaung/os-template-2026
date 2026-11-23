@@ -87,6 +87,9 @@ struct ProcessControlBlock {
         void *virtual_addr_used[PROCESS_PAGE_FRAME_COUNT_MAX];
         uint32_t page_frame_used_count;
     } memory;
+    /* Current heap break (end of mapped heap) for this process, or 0 when the
+     * process has not allocated any heap memory yet. */
+    uint32_t heap_break;
 };
 
 extern struct ProcessControlBlock _process_list[PROCESS_COUNT_MAX];

@@ -86,9 +86,7 @@ int main(void) {
 
             if (argc == 0) continue;
 
-            if (strcmp(argv[0], "ls") == 0) {
-                cmd_ls(argc, argv, &io, current_cwd_inode);
-            } else if (strcmp(argv[0], "cd") == 0) {
+            if (strcmp(argv[0], "cd") == 0) {
                 uint32_t old_cwd = current_cwd_inode;
                 cmd_cd(argc, argv, &io, &current_cwd_inode);
                 
@@ -111,20 +109,6 @@ int main(void) {
                         strcat(cwd_path, argv[1]);
                     }
                 }
-            } else if (strcmp(argv[0], "mkdir") == 0) {
-                cmd_mkdir(argc, argv, &io, current_cwd_inode);
-            } else if (strcmp(argv[0], "cat") == 0) {
-                cmd_cat(argc, argv, &io, current_cwd_inode);
-            } else if (strcmp(argv[0], "grep") == 0) {
-                cmd_grep(argc, argv, &io, current_cwd_inode);
-            } else if (strcmp(argv[0], "find") == 0) {
-                cmd_find(argc, argv, &io);
-            } else if (strcmp(argv[0], "cp") == 0) {
-                cmd_cp(argc, argv, &io, current_cwd_inode);
-            } else if (strcmp(argv[0], "rm") == 0) {
-                cmd_rm(argc, argv, &io, current_cwd_inode);
-            } else if (strcmp(argv[0], "mv") == 0) {
-                cmd_mv(argc, argv, &io, current_cwd_inode);
             } else if (strcmp(argv[0], "exec") == 0) {
                 cmd_exec(argc, argv, &io, current_cwd_inode);
             } else if (strcmp(argv[0], "ps") == 0) {
@@ -133,7 +117,7 @@ int main(void) {
                 cmd_kill(argc, argv, &io);
             } else if (strcmp(argv[0], "export") == 0) {
                 cmd_export(argc, argv, &io);
-            } else if (path_try_execute(argc, argv, &io)) {
+            } else if (path_try_execute(argc, argv, &io, current_cwd_inode)) {
             
             } else {
                 char *err = "Command not found\n";

@@ -11,6 +11,7 @@
 #include "header/stdlib/string.h"
 #include "header/stdlib/syscall_nums.h"
 #include "header/driver/cmos.h"
+#include "header/process/exec_args.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -172,6 +173,25 @@ void syscall(struct InterruptFrame frame) {
                     frame.cpu.general.edx & 0xFF            // color
                 );
             break;
+        case SYSCALL_EXEC_ARGS: {
+            int32_t *ret_ptr = (int32_t*) frame.cpu.general.ecx;
+            int32_t  pid     = process_create_with_args((struct ExecArgsRequest*) frame.cpu.general.ebx);
+            if (ret_ptr != NULL) *ret_ptr = pid;
+            break;
+        }
+        case SYSCALL_PROCESS_ALIVE:
+            if (frame.cpu.general.ecx != 0 && frame.cpu.general.ecx < 0xC0000000)
+                *((bool*) frame.cpu.general.ecx) = process_is_alive(frame.cpu.general.ebx);
+            break;
+        case SYSCALL_SHM_WRITE:
+            shm_write(frame.cpu.general.ebx, (const char*) frame.cpu.general.ecx, frame.cpu.general.edx);
+            break;
+        case SYSCALL_SHM_READ: {
+            uint32_t len = shm_read(frame.cpu.general.ebx, (char*) frame.cpu.general.ecx);
+            if (frame.cpu.general.edx != 0 && frame.cpu.general.edx < 0xC0000000)
+                *((uint32_t*) frame.cpu.general.edx) = len;
+            break;
+        }
     }
 }
 

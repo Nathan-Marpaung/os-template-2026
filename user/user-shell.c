@@ -33,6 +33,7 @@
 
 static uint32_t current_directory = 1u;
 static char current_path[MAX_PATH_SIZE] = "/";
+static char path_env[MAX_PATH_SIZE] = "/bin";
 static uint8_t directory_buffer[MAX_DIRECTORY_SIZE];
 static uint8_t file_buffer[MAX_FILE_SIZE];
 static char process_buffer[512];
@@ -65,6 +66,29 @@ static uint32_t text_length(const char *text);
 static bool text_equal(const char *left, const char *right);
 static bool copy_text(char *destination, const char *source,
                       uint32_t capacity);
+static void print_text_color(const char *text, uint8_t color);
+static void print_char(char character);
+static void print_error(const char *text);
+static bool resolve_file_path(const char *path,
+                              uint32_t *parent_inode,
+                              char *name);
+static bool shell_get_file_size(uint32_t parent_inode,
+                                const char *name,
+                                uint32_t *size);
+static bool read_file(const char *path,
+                      uint32_t *parent_inode,
+                      char *name,
+                      uint32_t *size);
+static bool write_file(uint32_t parent_inode,
+                       const char *name,
+                       const uint8_t *contents,
+                       uint32_t size);
+static bool path_contains_dir(const char *dir);
+static int32_t search_path(const char *cmd, char *out_path,
+                           uint32_t out_size);
+static void command_export(uint32_t argc, char *argv[]);
+static void path_save(void);
+static void path_load(void);
 
 static void update_current_path(const char *path) {
     char resolved[MAX_PATH_SIZE];
@@ -126,6 +150,157 @@ static void update_current_path(const char *path) {
     resolved[res_len] = '\0';
 
     copy_text(current_path, resolved, MAX_PATH_SIZE);
+}
+
+static bool path_contains_dir(const char *dir) {
+    uint32_t dir_len = text_length(dir);
+    if (dir_len == 0) {
+        return false;
+    }
+    const char *p = path_env;
+    while (*p != '\0') {
+        uint32_t start = 0;
+        char comp[MAX_PATH_SIZE];
+        while (*p != '\0' && *p != ':' && start + 1u < MAX_PATH_SIZE) {
+            comp[start++] = *p++;
+        }
+        comp[start] = '\0';
+        if (*p == ':') {
+            p++;
+        }
+        if (text_equal(comp, dir)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static int32_t search_path(const char *cmd, char *out_path,
+                           uint32_t out_size) {
+    const char *p = path_env;
+    while (*p != '\0') {
+        uint32_t dir_len = 0;
+        char dir[MAX_PATH_SIZE];
+        while (*p != '\0' && *p != ':' && dir_len + 1u < MAX_PATH_SIZE) {
+            dir[dir_len++] = *p++;
+        }
+        dir[dir_len] = '\0';
+        if (*p == ':') {
+            p++;
+        }
+
+        uint32_t total = 0;
+        for (uint32_t i = 0; i < dir_len && total + 1u < out_size; i++) {
+            out_path[total++] = dir[i];
+        }
+        if (total + 1u < out_size && dir[dir_len - 1] != '/') {
+            out_path[total++] = '/';
+        }
+        uint32_t cmd_len = text_length(cmd);
+        for (uint32_t i = 0; i < cmd_len && total + 1u < out_size; i++) {
+            out_path[total++] = cmd[i];
+        }
+        out_path[total] = '\0';
+
+        uint32_t parent_inode;
+        char name[MAX_PATH_SIZE];
+        uint32_t size;
+        if (resolve_file_path(out_path, &parent_inode, name) &&
+            shell_get_file_size(parent_inode, name, &size) && size != 0) {
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static void command_export(uint32_t argc, char *argv[]) {
+    if (argc == 1) {
+        print_text_color("PATH=", COLOR_WHITE);
+        print_text_color(path_env, COLOR_LIGHT_GRAY);
+        print_char('\n');
+        return;
+    }
+    if (argc == 3 && text_equal(argv[1], "add")) {
+        if (path_contains_dir(argv[2])) {
+            print_error("export: directory already in PATH\n");
+            return;
+        }
+        uint32_t len = text_length(path_env);
+        if (len > 0 && path_env[len - 1] != ':') {
+            if (len + 1u < MAX_PATH_SIZE) {
+                path_env[len++] = ':';
+            }
+        }
+        uint32_t dir_len = text_length(argv[2]);
+        if (len + dir_len + 1u < MAX_PATH_SIZE) {
+            for (uint32_t i = 0; i < dir_len; i++) {
+                path_env[len++] = argv[2][i];
+            }
+        }
+        path_env[len] = '\0';
+        path_save();
+    } else if (argc == 3 && text_equal(argv[1], "remove")) {
+        char new_path[MAX_PATH_SIZE];
+        uint32_t nlen = 0;
+        const char *p = path_env;
+        bool found = false;
+        while (*p != '\0') {
+            uint32_t start = 0;
+            char comp[MAX_PATH_SIZE];
+            while (*p != '\0' && *p != ':' && start + 1u < MAX_PATH_SIZE) {
+                comp[start++] = *p++;
+            }
+            comp[start] = '\0';
+            if (*p == ':') {
+                p++;
+            }
+            if (text_equal(comp, argv[2])) {
+                found = true;
+                continue;
+            }
+            if (nlen > 0) {
+                new_path[nlen++] = ':';
+            }
+            for (uint32_t i = 0; comp[i] != '\0' && nlen + 1u < MAX_PATH_SIZE;
+                 i++) {
+                new_path[nlen++] = comp[i];
+            }
+        }
+        new_path[nlen] = '\0';
+        if (found) {
+            copy_text(path_env, new_path, MAX_PATH_SIZE);
+            path_save();
+        } else {
+            print_error("export: directory not in PATH\n");
+        }
+    } else {
+        print_error("export: usage: export [add|remove] <dir>\n");
+    }
+}
+
+static void path_save(void) {
+    uint32_t parent_inode;
+    char name[MAX_PATH_SIZE];
+    if (!resolve_file_path("/path.env", &parent_inode, name)) {
+        return;
+    }
+    uint32_t len = text_length(path_env);
+    if (len == 0 || len > MAX_FILE_SIZE) {
+        return;
+    }
+    write_file(parent_inode, name, (const uint8_t *)path_env, len);
+}
+
+static void path_load(void) {
+    uint32_t parent_inode;
+    char name[MAX_PATH_SIZE];
+    uint32_t size;
+    if (!read_file("/path.env", &parent_inode, name, &size) || size == 0 ||
+        size > MAX_PATH_SIZE) {
+        return;
+    }
+    file_buffer[size] = '\0';
+    copy_text(path_env, (char *)file_buffer, MAX_PATH_SIZE);
 }
 
 static uint32_t text_length(const char *text) {
@@ -790,6 +965,14 @@ static void command_exec(uint32_t argc, char *argv[]) {
         return;
     }
     const char *path = argv[0];
+    char resolved[MAX_PATH_SIZE];
+    if (path[0] != '/') {
+        if (search_path(path, resolved, sizeof(resolved)) != 0) {
+            print_error("exec: cannot find executable\n");
+            return;
+        }
+        path = resolved;
+    }
     uint32_t parent_inode;
     uint32_t size;
     char name[MAX_PATH_SIZE];
@@ -910,6 +1093,8 @@ static void print_help(void) {
     print_text_color("power off system (ACPI 0x604)\n", COLOR_DARK_GRAY);
     print_text_color("  exit                    ", COLOR_WHITE);
     print_text_color("exit this process\n", COLOR_DARK_GRAY);
+    print_text_color("  export [add|remove] dir ", COLOR_WHITE);
+    print_text_color("manage PATH directories\n", COLOR_DARK_GRAY);
 }
 
 static void execute_command(char *argv[], uint32_t argc) {
@@ -1002,8 +1187,20 @@ static void execute_command(char *argv[], uint32_t argc) {
     } else if (text_equal(command, "exit") && argc == 1) {
         call_syscall(SYS_EXIT, 0, 0, 0);
         print_error("exit: could not terminate process\n");
+    } else if (text_equal(command, "export")) {
+        command_export(argc, argv);
     } else {
-        print_error("Unknown command or invalid arguments. Type 'help'.\n");
+        char resolved[MAX_PATH_SIZE];
+        if (search_path(command, resolved, sizeof(resolved)) == 0) {
+            char *new_argv[8];
+            new_argv[0] = resolved;
+            for (uint32_t i = 1; i < argc && i < 8; i++) {
+                new_argv[i] = argv[i];
+            }
+            command_exec(argc, new_argv);
+        } else {
+            print_error("Unknown command or invalid arguments. Type 'help'.\n");
+        }
     }
 }
 
@@ -1073,6 +1270,7 @@ static void parse_and_execute(char *line) {
 }
 
 int main(void) {
+    path_load();
     print_text_color("Welcome to OSama\n", COLOR_BLUE);
     output_flush();
     char input_buffer[MAX_INPUT_SIZE];

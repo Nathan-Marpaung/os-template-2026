@@ -32,6 +32,7 @@
 #define COLOR_WHITE         0x0F
 
 static uint32_t current_directory = 1u;
+static char current_path[MAX_PATH_SIZE] = "/";
 static uint8_t directory_buffer[MAX_DIRECTORY_SIZE];
 static uint8_t file_buffer[MAX_FILE_SIZE];
 static char process_buffer[512];
@@ -58,6 +59,73 @@ static void output_flush(void) {
                      (uint32_t)output_colors[i], 0);
     }
     output_pos = 0;
+}
+
+static uint32_t text_length(const char *text);
+static bool text_equal(const char *left, const char *right);
+static bool copy_text(char *destination, const char *source,
+                      uint32_t capacity);
+
+static void update_current_path(const char *path) {
+    char resolved[MAX_PATH_SIZE];
+    uint32_t res_len = 0;
+
+    if (path[0] == '/') {
+        resolved[res_len++] = '/';
+        path++;
+    } else {
+        uint32_t cur_len = text_length(current_path);
+        for (uint32_t i = 0; i < cur_len && res_len + 1u < MAX_PATH_SIZE; i++) {
+            resolved[res_len++] = current_path[i];
+        }
+    }
+
+    const char *p = path;
+    while (*p != '\0') {
+        while (*p == '/') {
+            p++;
+        }
+        if (*p == '\0') {
+            break;
+        }
+
+        char comp[MAX_PATH_SIZE];
+        uint32_t clen = 0;
+        while (*p != '\0' && *p != '/' && clen + 1u < MAX_PATH_SIZE) {
+            comp[clen++] = *p++;
+        }
+        comp[clen] = '\0';
+
+        if (text_equal(comp, ".")) {
+            continue;
+        } else if (text_equal(comp, "..")) {
+            while (res_len > 1 && resolved[res_len - 1] != '/') {
+                res_len--;
+            }
+            if (res_len > 1) {
+                res_len--;
+            }
+            resolved[res_len] = '\0';
+        } else {
+            if (res_len > 0 && resolved[res_len - 1] != '/') {
+                if (res_len + 1u < MAX_PATH_SIZE) {
+                    resolved[res_len++] = '/';
+                }
+            }
+            for (uint32_t i = 0; comp[i] != '\0' && res_len + 1u < MAX_PATH_SIZE;
+                 i++) {
+                resolved[res_len++] = comp[i];
+            }
+        }
+    }
+
+    if (res_len == 0) {
+        resolved[0] = '/';
+        res_len = 1;
+    }
+    resolved[res_len] = '\0';
+
+    copy_text(current_path, resolved, MAX_PATH_SIZE);
 }
 
 static uint32_t text_length(const char *text) {
@@ -222,6 +290,7 @@ static void print_prompt(void) {
     print_text_color("@", COLOR_GREEN);
     print_text_color("user", COLOR_GREEN);
     print_text_color(":", COLOR_GREEN);
+    print_text_color(current_path, COLOR_LIGHT_GRAY);
     print_text_color("$ ", COLOR_WHITE);
 }
 
@@ -860,8 +929,11 @@ static void execute_command(char *argv[], uint32_t argc) {
     } else if (text_equal(command, "cd")) {
         if (argc == 1) {
             current_directory = 1u;
+            copy_text(current_path, "/", MAX_PATH_SIZE);
         } else if (!resolve_directory_path(argv[1], &current_directory)) {
             print_error("cd: directory not found\n");
+        } else {
+            update_current_path(argv[1]);
         }
     } else if (text_equal(command, "mkdir") && argc == 2) {
         command_mkdir(argv[1]);

@@ -12,6 +12,8 @@
 #define MAX_FIND_DEPTH 8u
 #define MAX_HISTORY_SIZE 16u
 
+#define OUTPUT_BUFFER_SIZE 512u
+
 #define COLOR_BLACK         0x00
 #define COLOR_BLUE          0x01
 #define COLOR_GREEN         0x02
@@ -40,6 +42,23 @@ static uint32_t command_history_position = 0;
 static char pipe_buffer[512];
 static uint32_t pipe_pos = 0;
 static bool pipe_mode = false;
+
+static char output_buffer[OUTPUT_BUFFER_SIZE];
+static uint8_t output_colors[OUTPUT_BUFFER_SIZE];
+static uint32_t output_pos = 0;
+
+static int32_t call_syscall(uint32_t number,
+                            uint32_t arg1,
+                            uint32_t arg2,
+                            uint32_t arg3);
+
+static void output_flush(void) {
+    for (uint32_t i = 0; i < output_pos; i++) {
+        call_syscall(SYS_PUTCHAR, (uint32_t)(uint8_t)output_buffer[i],
+                     (uint32_t)output_colors[i], 0);
+    }
+    output_pos = 0;
+}
 
 static uint32_t text_length(const char *text) {
     uint32_t length = 0;
@@ -118,7 +137,12 @@ static void print_char_color(char character, uint8_t color) {
         }
         return;
     }
-    call_syscall(SYS_PUTCHAR, (uint32_t)(uint8_t)character, (uint32_t)color, 0);
+    if (output_pos >= OUTPUT_BUFFER_SIZE) {
+        output_flush();
+    }
+    output_buffer[output_pos] = character;
+    output_colors[output_pos] = color;
+    output_pos++;
 }
 
 static void print_text_color(const char *text, uint8_t color) {
@@ -258,13 +282,14 @@ static void read_line(char *buffer) {
         }
         if (character == (char)KEY_UP) {
             if (command_history_position > 0u) {
-                call_syscall(SYS_SCROLL, 3u, 0, 0);
-                command_history_position--;
-                index = replace_input_line(
-                    buffer,
-                    index,
-                    command_history[command_history_position]
-                );
+            call_syscall(SYS_SCROLL, 3u, 0, 0);
+            command_history_position--;
+            index = replace_input_line(
+                buffer,
+                index,
+                command_history[command_history_position]
+            );
+            output_flush();
             }
             continue;
         }
@@ -281,6 +306,7 @@ static void read_line(char *buffer) {
                 } else {
                     index = replace_input_line(buffer, index, "");
                 }
+                output_flush();
             }
             continue;
         }
@@ -295,6 +321,7 @@ static void read_line(char *buffer) {
         if (character == '\n' || character == '\r') {
             call_syscall(SYS_SCROLL, 3u, 0, 0);
             print_text("\n");
+            output_flush();
             buffer[index] = '\0';
             return;
         }
@@ -303,6 +330,7 @@ static void read_line(char *buffer) {
                 call_syscall(SYS_SCROLL, 3u, 0, 0);
                 index--;
                 print_text("\b \b");
+                output_flush();
             }
             continue;
         }
@@ -312,6 +340,7 @@ static void read_line(char *buffer) {
             buffer[index] = character;
             index++;
             print_char_color(character, COLOR_WHITE);
+            output_flush();
         }
     }
 }
@@ -973,12 +1002,15 @@ static void parse_and_execute(char *line) {
 
 int main(void) {
     print_text_color("Welcome to OSama\n", COLOR_BLUE);
+    output_flush();
     char input_buffer[MAX_INPUT_SIZE];
     while (true) {
         print_prompt();
+        output_flush();
         read_line(input_buffer);
         history_add(input_buffer);
         parse_and_execute(input_buffer);
+        output_flush();
     }
     return 0;
 }

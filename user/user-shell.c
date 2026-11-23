@@ -524,6 +524,16 @@ static void read_line(char *buffer) {
         if (character == '\0') {
             continue;
         }
+        if (character == (char)KEY_CTRL_C) {
+            while (index > 0u) {
+                index--;
+                print_text("\b \b");
+            }
+            print_text("^C\n");
+            output_flush();
+            buffer[index] = '\0';
+            return;
+        }
         if (character == (char)KEY_UP) {
             if (command_history_position > 0u) {
             call_syscall(SYS_SCROLL, 3u, 0, 0);

@@ -26,6 +26,11 @@ struct EXT2DriverRequest;
 #define SYS_SHUTDOWN       15
 #define SYS_FB_PUTCHAR     17
 #define SYS_FB_SET_CURSOR  18
+#define SYS_GET_KEY_STATUS 19
+
+/* SYS_GET_KEY_STATUS return flags (also cleared once read) */
+#define SYS_KEY_STATUS_CTRL_C    0x01u
+#define SYS_KEY_STATUS_CTRL_HELD 0x02u
 
 static inline int32_t system_call(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx) {
     int32_t ret;
@@ -100,6 +105,17 @@ static inline void sys_fb_putchar(
 
 static inline void sys_fb_set_cursor(uint8_t row, uint8_t col) {
     system_call(SYS_FB_SET_CURSOR, (uint32_t)row, (uint32_t)col, 0);
+}
+
+/**
+ * Query keyboard modifier/control status from user-space.
+ *
+ * @return Bitmask of SYS_KEY_STATUS_* flags. The SYS_KEY_STATUS_CTRL_C bit is
+ *         latched in the kernel and cleared by this call, so each Ctrl+C press
+ *         is reported exactly once.
+ */
+static inline uint32_t sys_get_key_status(void) {
+    return (uint32_t)system_call(SYS_GET_KEY_STATUS, 0, 0, 0);
 }
 
 #endif

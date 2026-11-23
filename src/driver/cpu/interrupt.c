@@ -298,6 +298,17 @@ void handle_syscall(struct InterruptFrame *frame) {
             frame->cpu.general.eax = (uint8_t)key;
             break;
         }
+        case SYS_GET_KEY_STATUS: {
+            uint32_t status = 0u;
+            if (keyboard_get_ctrl_c_status()) {
+                status |= SYS_KEY_STATUS_CTRL_C;
+            }
+            if (keyboard_is_ctrl_pressed()) {
+                status |= SYS_KEY_STATUS_CTRL_HELD;
+            }
+            frame->cpu.general.eax = status;
+            break;
+        }
         case SYS_CLEAR_SCREEN:
             framebuffer_clear();
             syscall_cursor_row = 0;

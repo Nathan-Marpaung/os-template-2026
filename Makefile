@@ -137,7 +137,7 @@ insert-bin: inserter user-clock user-hello
 	@cd $(OUTPUT_FOLDER); ./inserter -f clock /bin $(DISK_NAME).bin
 	@cd $(OUTPUT_FOLDER); ./inserter -f hello /bin $(DISK_NAME).bin
 
-CMD_LIST = cat cp echo find grep ls mkdir mv rm clear
+CMD_LIST = cat cp echo find grep ls mkdir mv rm clear help
 
 user-commands:
 	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0-cmd.s -o crt0-cmd.o

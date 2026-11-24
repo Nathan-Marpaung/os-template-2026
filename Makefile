@@ -20,8 +20,9 @@ LFLAGS        = -T $(SOURCE_FOLDER)/linker.ld -melf_i386
 .PHONY: run all build clean kernel iso disk
 
 # 'disk' hanya membuat storage.bin jika belum ada (isi disk lama tidak ditimpa)
-run: all disk insert-shell insert-hello insert-clock insert-bin
+run: all disk insert-shell insert-hello insert-clock insert-zzz insert-bin
 	@qemu-system-i386 -s -rtc base=localtime \
+		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 \
 		-drive file=$(OUTPUT_FOLDER)/$(DISK_NAME).bin,format=raw,if=ide,index=0,media=disk \
 		-cdrom $(OUTPUT_FOLDER)/$(ISO_NAME).iso
 all: build
@@ -135,3 +136,17 @@ insert-bin: inserter user-clock user-hello
 	@cd $(OUTPUT_FOLDER); ./inserter -d bin 1 $(DISK_NAME).bin
 	@cd $(OUTPUT_FOLDER); ./inserter -f clock /bin $(DISK_NAME).bin
 	@cd $(OUTPUT_FOLDER); ./inserter -f hello /bin $(DISK_NAME).bin
+	@cd $(OUTPUT_FOLDER); ./inserter -f zzz /bin $(DISK_NAME).bin
+
+user-zzz:
+	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
+	@$(CC)  $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/zzz.c -o zzz.o
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 --oformat=binary \
+		crt0.o zzz.o -o $(OUTPUT_FOLDER)/zzz
+	@echo Linking zzz object files and generate flat binary...
+	@size --target=binary $(OUTPUT_FOLDER)/zzz
+	@rm -f *.o
+
+insert-zzz: inserter user-zzz
+	@echo Inserting zzz into root directory...
+	@cd $(OUTPUT_FOLDER); ./inserter -f zzz 1 $(DISK_NAME).bin

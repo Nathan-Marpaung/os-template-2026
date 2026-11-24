@@ -1,6 +1,7 @@
 #include "header/driver/keyboard.h"
 #include "header/cpu/portio.h"
 #include "header/stdlib/string.h"
+#include <stddef.h>
 
 const char keyboard_scancode_1_to_ascii_map[256] = {
       0, 0x1B, '1', '2', '3', '4', '5', '6',  '7', '8', '9',  '0',  '-', '=', '\b', '\t',
@@ -30,6 +31,8 @@ const char keyboard_scancode_1_to_ascii_shift_map[128] = {
 };
 
 static bool shift_pressed = false;
+static uint8_t key_down[128];
+static uint8_t key_press_count[128];
 
 static struct KeyboardDriverState keyboard_state = {
     .read_extended_mode = false,
@@ -50,6 +53,23 @@ void get_keyboard_buffer(char *buf) {
     keyboard_state.keyboard_buffer = 0;
 }
 
+void keyboard_get_matrix(uint8_t *out_down, uint8_t *out_pressed) {
+    for (int i = 0; i < 128; i++) {
+        if (out_down != NULL) out_down[i] = key_down[i];
+        if (out_pressed != NULL) {
+            out_pressed[i] = key_press_count[i];
+            key_press_count[i] = 0;
+        }
+    }
+}
+
+void keyboard_clear_state(void) {
+    keyboard_state.keyboard_buffer = 0;
+    for (int i = 0; i < 128; i++) {
+        key_press_count[i] = 0;
+    }
+}
+
 void keyboard_isr(void) {
     uint8_t scancode = in(KEYBOARD_DATA_PORT);
 
@@ -58,15 +78,28 @@ void keyboard_isr(void) {
             keyboard_state.read_extended_mode = true;
         } else if (keyboard_state.read_extended_mode) {
             keyboard_state.read_extended_mode = false;
-        } else if (scancode == 0x2A || scancode == 0x36) {      // Shift pressed
-            shift_pressed = true;
-        } else if (scancode == 0xAA || scancode == 0xB6) {      // Shift released
-            shift_pressed = false;
-        } else if (!(scancode & 0x80)) {
-            char ascii = shift_pressed
-                ? keyboard_scancode_1_to_ascii_shift_map[scancode]
-                : keyboard_scancode_1_to_ascii_map[scancode];
-            if (ascii) keyboard_state.keyboard_buffer = ascii;
+        } else {
+            if (scancode & 0x80) {
+                uint8_t code = scancode & 0x7F;
+                key_down[code] = 0;
+                if (scancode == 0xAA || scancode == 0xB6) {
+                    shift_pressed = false;
+                }
+            } else {
+                if (!key_down[scancode] && key_press_count[scancode] < 255) {
+                    key_press_count[scancode]++;
+                }
+                key_down[scancode] = 1;
+
+                if (scancode == 0x2A || scancode == 0x36) {
+                    shift_pressed = true;
+                } else {
+                    char ascii = shift_pressed
+                        ? keyboard_scancode_1_to_ascii_shift_map[scancode]
+                        : keyboard_scancode_1_to_ascii_map[scancode];
+                    if (ascii) keyboard_state.keyboard_buffer = ascii;
+                }
+            }
         }
     }
 

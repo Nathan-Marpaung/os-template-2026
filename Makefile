@@ -20,7 +20,7 @@ LFLAGS        = -T $(SOURCE_FOLDER)/linker.ld -melf_i386
 .PHONY: run all build clean kernel iso disk
 
 # 'disk' hanya membuat storage.bin jika belum ada (isi disk lama tidak ditimpa)
-run: all disk insert-shell insert-hello insert-clock insert-bin
+run: all disk insert-shell insert-hello insert-clock insert-bin insert-commands
 	@qemu-system-i386 -s -rtc base=localtime \
 		-drive file=$(OUTPUT_FOLDER)/$(DISK_NAME).bin,format=raw,if=ide,index=0,media=disk \
 		-cdrom $(OUTPUT_FOLDER)/$(ISO_NAME).iso
@@ -49,6 +49,7 @@ kernel:
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/process.c -o $(OUTPUT_FOLDER)/process.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/scheduler.c -o $(OUTPUT_FOLDER)/scheduler.o
 	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/cmos.c -o $(OUTPUT_FOLDER)/cmos.o
+	@$(CC) $(CFLAGS) $(SOURCE_FOLDER)/exec_args.c -o $(OUTPUT_FOLDER)/exec_args.o
 	@$(LIN) $(LFLAGS) $(OUTPUT_FOLDER)/*.o -o $(OUTPUT_FOLDER)/kernel
 	@echo Linking object files and generate elf32...
 	@rm -f *.o
@@ -135,3 +136,24 @@ insert-bin: inserter user-clock user-hello
 	@cd $(OUTPUT_FOLDER); ./inserter -d bin 1 $(DISK_NAME).bin
 	@cd $(OUTPUT_FOLDER); ./inserter -f clock /bin $(DISK_NAME).bin
 	@cd $(OUTPUT_FOLDER); ./inserter -f hello /bin $(DISK_NAME).bin
+
+CMD_LIST = cat cp echo find grep ls mkdir mv rm clear help
+
+user-commands:
+	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0-cmd.s -o crt0-cmd.o
+	@$(CC)  $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/cmd_runtime.c -o cmd_runtime.o
+	@$(CC)  $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/shell_cmd.c -o shell_cmd.o
+	@$(CC)  $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/stdlib/string.c -o string.o
+	@for cmd in $(CMD_LIST); do \
+		$(CC) $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/cmd/$$cmd.c -o cmd-$$cmd.o || exit 1; \
+		$(LIN) -T $(SOURCE_FOLDER)/cmd-linker.ld -melf_i386 --oformat=binary \
+			crt0-cmd.o cmd-$$cmd.o cmd_runtime.o shell_cmd.o string.o -o $(OUTPUT_FOLDER)/$$cmd || exit 1; \
+		$(LIN) -T $(SOURCE_FOLDER)/cmd-linker.ld -melf_i386 --oformat=elf32-i386 \
+			crt0-cmd.o cmd-$$cmd.o cmd_runtime.o shell_cmd.o string.o -o $(OUTPUT_FOLDER)/$${cmd}_elf || exit 1; \
+	done
+	@echo Linking separated shell commands: $(CMD_LIST)
+	@rm -f *.o
+
+insert-commands: inserter user-commands insert-bin
+	@echo Inserting separated shell commands into /bin...
+	@cd $(OUTPUT_FOLDER); for cmd in $(CMD_LIST); do ./inserter -f $$cmd /bin $(DISK_NAME).bin || exit 1; done

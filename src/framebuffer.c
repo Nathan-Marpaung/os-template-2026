@@ -22,12 +22,18 @@ void framebuffer_write(uint8_t row, uint8_t col, char c, uint8_t fg, uint8_t bg)
     FRAMEBUFFER_MEMORY_OFFSET[offset + 1] = (uint8_t) ((bg << 4) | (fg & 0x0F));
 }
 
+static uint8_t cursor_row = 0;
+static uint8_t cursor_col = 0;
+
 void framebuffer_clear(void) {
     for (uint8_t row = 0; row < 25; row++) {
         for (uint8_t col = 0; col < 80; col++) {
             framebuffer_write(row, col, 0x00, 0x07, 0x00);
         }
     }
+    cursor_row = 0;
+    cursor_col = 0;
+    framebuffer_set_cursor(0, 0);
 }
 
 static void framebuffer_scroll(void) {
@@ -45,8 +51,6 @@ static void framebuffer_scroll(void) {
 }
 
 
-static uint8_t cursor_row = 0;
-static uint8_t cursor_col = 0;
 
 void puts(const char *buf, uint32_t count, uint32_t color) {
     for (uint32_t i = 0; i < count; i++) {

@@ -11,6 +11,7 @@
 #include "header/stdlib/string.h"
 #include "header/stdlib/syscall_nums.h"
 #include "header/driver/cmos.h"
+#include "header/process/exec_args.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -96,6 +97,10 @@ void syscall(struct InterruptFrame frame) {
         case 7: 
             keyboard_state_activate();
             break;
+        case SYSCALL_CLEAR_SCR:
+            framebuffer_clear();
+            framebuffer_set_cursor(0, 0);
+            break;
         case SYSCALL_EXIT: {
             struct ProcessControlBlock *curr = process_get_current_running_pcb_pointer();
             if (curr != NULL) {
@@ -127,7 +132,18 @@ void syscall(struct InterruptFrame frame) {
         case SYSCALL_KILL: {
             uint32_t target_pid = frame.cpu.general.ebx;
             int32_t *ret_ptr = (int32_t*) frame.cpu.general.ecx;
+            if (target_pid == 1) { if (ret_ptr != NULL) *ret_ptr = -1; break; }
             struct ProcessControlBlock *curr = process_get_current_running_pcb_pointer();
+
+            bool is_clock = false;
+            for (uint32_t i = 0; i < PROCESS_COUNT_MAX; i++) {
+                if (_process_list[i].metadata.active && _process_list[i].metadata.pid == target_pid) {
+                    if (strcmp(_process_list[i].metadata.name, "clock") == 0) {
+                        is_clock = true;
+                    }
+                    break;
+                }
+            }
 
             if (curr != NULL && curr->metadata.pid == target_pid) {
                 process_destroy(target_pid);
@@ -135,6 +151,11 @@ void syscall(struct InterruptFrame frame) {
             }
 
             bool ok = process_destroy(target_pid);
+            if (ok && is_clock) {
+                for (uint8_t col = 0; col < FRAMEBUFFER_WIDTH; col++) {
+                    framebuffer_write(FRAMEBUFFER_STATUS_ROW, col, 0x00, 0x07, 0x00);
+                }
+            }
             if (ret_ptr != NULL) *ret_ptr = ok ? 0 : -1;
             break;
         }
@@ -172,6 +193,25 @@ void syscall(struct InterruptFrame frame) {
                     frame.cpu.general.edx & 0xFF            // color
                 );
             break;
+        case SYSCALL_EXEC_ARGS: {
+            int32_t *ret_ptr = (int32_t*) frame.cpu.general.ecx;
+            int32_t  pid     = process_create_with_args((struct ExecArgsRequest*) frame.cpu.general.ebx);
+            if (ret_ptr != NULL) *ret_ptr = pid;
+            break;
+        }
+        case SYSCALL_PROCESS_ALIVE:
+            if (frame.cpu.general.ecx != 0 && frame.cpu.general.ecx < 0xC0000000)
+                *((bool*) frame.cpu.general.ecx) = process_is_alive(frame.cpu.general.ebx);
+            break;
+        case SYSCALL_SHM_WRITE:
+            shm_write(frame.cpu.general.ebx, (const char*) frame.cpu.general.ecx, frame.cpu.general.edx);
+            break;
+        case SYSCALL_SHM_READ: {
+            uint32_t len = shm_read(frame.cpu.general.ebx, (char*) frame.cpu.general.ecx);
+            if (frame.cpu.general.edx != 0 && frame.cpu.general.edx < 0xC0000000)
+                *((uint32_t*) frame.cpu.general.edx) = len;
+            break;
+        }
     }
 }
 

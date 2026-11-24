@@ -58,6 +58,11 @@ void keyboard_isr(void) {
             keyboard_state.read_extended_mode = true;
         } else if (keyboard_state.read_extended_mode) {
             keyboard_state.read_extended_mode = false;
+            if (scancode == 0x48) {                 // Up Arrow
+                keyboard_state.keyboard_buffer = (char) 0x80;
+            } else if (scancode == 0x50) {          // Down Arrow
+                keyboard_state.keyboard_buffer = (char) 0x81;
+            }
         } else if (scancode == 0x2A || scancode == 0x36) {      // Shift pressed
             shift_pressed = true;
         } else if (scancode == 0xAA || scancode == 0xB6) {      // Shift released

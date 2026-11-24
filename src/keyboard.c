@@ -33,6 +33,7 @@ const char keyboard_scancode_1_to_ascii_shift_map[128] = {
 static bool shift_pressed = false;
 static uint8_t key_down[128];
 static uint8_t key_press_count[128];
+static bool caps_lock_on  = false;
 
 static struct KeyboardDriverState keyboard_state = {
     .read_extended_mode = false,
@@ -78,11 +79,16 @@ void keyboard_isr(void) {
             keyboard_state.read_extended_mode = true;
         } else if (keyboard_state.read_extended_mode) {
             keyboard_state.read_extended_mode = false;
+            if (scancode == 0x48) {                 // Up Arrow
+                keyboard_state.keyboard_buffer = (char) 0x80;
+            } else if (scancode == 0x50) {          // Down Arrow
+                keyboard_state.keyboard_buffer = (char) 0x81;
+            }
         } else {
             if (scancode & 0x80) {
                 uint8_t code = scancode & 0x7F;
                 key_down[code] = 0;
-                if (scancode == 0xAA || scancode == 0xB6) {
+                if (scancode == 0xAA || scancode == 0xB6) {     // Shift released
                     shift_pressed = false;
                 }
             } else {
@@ -91,15 +97,25 @@ void keyboard_isr(void) {
                 }
                 key_down[scancode] = 1;
 
-                if (scancode == 0x2A || scancode == 0x36) {
+                if (scancode == 0x2A || scancode == 0x36) {     // Shift pressed
                     shift_pressed = true;
+                } else if (scancode == 0x3A) {                  // Caps Lock pressed
+                    caps_lock_on = !caps_lock_on;
                 } else {
-                    char ascii = shift_pressed
-                        ? keyboard_scancode_1_to_ascii_shift_map[scancode]
-                        : keyboard_scancode_1_to_ascii_map[scancode];
+                    char base = keyboard_scancode_1_to_ascii_map[scancode];
+                    char ascii;
+                    if (base >= 'a' && base <= 'z') {
+                        bool upper = shift_pressed ^ caps_lock_on;
+                        ascii = upper ? (base - 'a' + 'A') : base;
+                    } else {
+                        ascii = shift_pressed
+                            ? keyboard_scancode_1_to_ascii_shift_map[scancode]
+                            : base;
+                    }
                     if (ascii) keyboard_state.keyboard_buffer = ascii;
                 }
             }
+        }
         }
     }
 

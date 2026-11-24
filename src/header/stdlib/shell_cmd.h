@@ -23,5 +23,6 @@ void cmd_mv(int argc, char **argv, struct ShellIO *io, uint32_t cwd);
 void cmd_exec(int argc, char **argv, struct ShellIO *io, uint32_t cwd);
 void cmd_ps(int argc, char **argv, struct ShellIO *io);
 void cmd_kill(int argc, char **argv, struct ShellIO *io);
+void cmd_clear(void);
 
 #endif

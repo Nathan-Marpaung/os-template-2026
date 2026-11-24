@@ -268,6 +268,19 @@ void cmd_grep(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
 }
 
 // Code Fikri taro bawah yeah
+#define COPY_BUF_SIZE 0x4000
+static char copy_file_buf[COPY_BUF_SIZE];
+
+static uint32_t detect_copy_size(const char *buf, uint32_t max_size) {
+    uint32_t last = max_size;
+    while (last > 0 && buf[last - 1] == 0) {
+        last--;
+    }
+    if (last == 0) return 1;
+    uint32_t aligned = (last + 3) & ~3u;
+    return (aligned <= max_size) ? aligned : last;
+}
+
 void cmd_cp(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
     if (argc < 3) {
         char *err = "cp: Penggunaan: cp <src> <dst>\n";
@@ -276,15 +289,14 @@ void cmd_cp(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
         return;
     }
 
-    char file_buf[MAX_IO_BUFFER];
-    memset(file_buf, 0, MAX_IO_BUFFER);
+    memset(copy_file_buf, 0, COPY_BUF_SIZE);
 
     struct EXT2DriverRequest read_req = {
         .parent_inode = cwd,
         .name = argv[1],
         .name_len = strlen(argv[1]),
-        .buffer_size = MAX_IO_BUFFER,
-        .buf = file_buf
+        .buffer_size = COPY_BUF_SIZE,
+        .buf = copy_file_buf
     };
 
     int32_t retcode;
@@ -297,9 +309,7 @@ void cmd_cp(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
         return;
     }
 
-    // buffer_size == 0 berarti buat folder, jadi file kosong tetap ditulis minimal 1 byte
-    uint32_t size = strlen(file_buf);
-    if (size == 0) size = 1;
+    uint32_t size = detect_copy_size(copy_file_buf, COPY_BUF_SIZE);
 
     struct EXT2DriverRequest write_req = {
         .parent_inode = cwd,
@@ -307,7 +317,7 @@ void cmd_cp(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
         .name_len = strlen(argv[2]),
         .is_directory = false,
         .buffer_size = size,
-        .buf = file_buf
+        .buf = copy_file_buf
     };
 
     syscall(SYSCALL_WRITE, (uint32_t) &write_req, (uint32_t) &retcode, 0);
@@ -386,15 +396,14 @@ void cmd_mv(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
         return;
     }
 
-    char file_buf[MAX_IO_BUFFER];
-    memset(file_buf, 0, MAX_IO_BUFFER);
+    memset(copy_file_buf, 0, COPY_BUF_SIZE);
 
     struct EXT2DriverRequest read_req = {
         .parent_inode = cwd,
         .name = argv[1],
         .name_len = strlen(argv[1]),
-        .buffer_size = MAX_IO_BUFFER,
-        .buf = file_buf
+        .buffer_size = COPY_BUF_SIZE,
+        .buf = copy_file_buf
     };
 
     int32_t retcode;
@@ -407,8 +416,7 @@ void cmd_mv(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
         return;
     }
 
-    uint32_t size = strlen(file_buf);
-    if (size == 0) size = 1;
+    uint32_t size = detect_copy_size(copy_file_buf, COPY_BUF_SIZE);
 
     uint32_t dst_parent = find_dir_inode(cwd, argv[2]);
     char *dst_name = argv[1];              /* moving into a folder keeps the name */
@@ -420,7 +428,7 @@ void cmd_mv(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
         .name_len = strlen(dst_name),
         .is_directory = false,
         .buffer_size = size,
-        .buf = file_buf
+        .buf = copy_file_buf
     };
 
     syscall(SYSCALL_WRITE, (uint32_t) &write_req, (uint32_t) &retcode, 0);
@@ -740,3 +748,6 @@ void cmd_kill(int argc, char **argv, struct ShellIO *io) {
     }
 }
 
+void cmd_clear(void) {
+    syscall(SYSCALL_CLEAR_SCR, 0, 0, 0);
+}

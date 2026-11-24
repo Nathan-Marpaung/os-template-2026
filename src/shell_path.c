@@ -184,26 +184,56 @@ void cmd_export(int argc, char **argv, struct ShellIO *io) {
 
 /* ------------------------------ execute ------------------------------ */
 
-bool path_try_execute(int argc, char **argv, struct ShellIO *io) {
-    (void) argc;
-
+bool path_try_execute(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
     uint32_t dir_inode;
     if (!path_find_executable(argv[0], &dir_inode))
         return false;
 
-    // Sama seperti cmd_exec, hanya parent_inode diisi folder tempat program ditemukan
-    struct EXT2DriverRequest request = {
-        .buf          = (void*) 0x0,
+    bool background = (strcmp(argv[0], "clock") == 0);
+    if (argc > 1 && strcmp(argv[argc - 1], "&") == 0) {
+        background = true;
+        argc--;
+    }
+
+    // Input pipeline dititipkan ke kernel, output lama dikosongkan
+    syscall(SYSCALL_SHM_WRITE, SHM_CHANNEL_INPUT, (uint32_t) io->input_buffer, strlen(io->input_buffer));
+    syscall(SYSCALL_SHM_WRITE, SHM_CHANNEL_OUTPUT, 0, 0);
+
+    struct ExecArgsRequest request = {
         .name         = argv[0],
         .name_len     = (uint8_t) strlen(argv[0]),
         .parent_inode = dir_inode,
-        .buffer_size  = 0x40000,
-        .is_directory = false,
+        .argc         = (uint32_t) argc,
+        .argv         = argv,
+        .cwd_inode    = cwd,
     };
-    int32_t retcode = -1;
-    syscall(SYSCALL_EXEC, (uint32_t) &request, (uint32_t) &retcode, 0);
-
-    if (retcode != 0)
+    int32_t pid = -1;
+    syscall(SYSCALL_EXEC_ARGS, (uint32_t) &request, (uint32_t) &pid, 0);
+    if (pid <= 0) {
         io_write(io, "Gagal menjalankan program dari PATH\n");
+        return true;
+    }
+
+   if (background) {
+        return true;
+    }
+
+    // Tunggu sampai proses selesai (exit) supaya tidak ada proses yatim.
+    // Esc menghentikan program yang tidak pernah selesai (mis. clock tanpa &).
+    bool alive = true;
+    while (alive) {
+        char c = 0;
+        syscall(SYSCALL_GETCHAR, (uint32_t) &c, 0, 0);
+        if (c == 0x1B) {
+            int32_t retcode = -1;
+            syscall(SYSCALL_KILL, (uint32_t) pid, (uint32_t) &retcode, 0);
+        }
+        syscall(SYSCALL_PROCESS_ALIVE, (uint32_t) pid, (uint32_t) &alive, 0);
+    }
+
+    // Ambil output command dari kernel
+    uint32_t len = 0;
+    syscall(SYSCALL_SHM_READ, SHM_CHANNEL_OUTPUT, (uint32_t) io->output_buffer, (uint32_t) &len);
+    io->output_len = (int) len;
     return true;
 }

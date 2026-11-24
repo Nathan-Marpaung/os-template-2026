@@ -132,6 +132,7 @@ void syscall(struct InterruptFrame frame) {
         case SYSCALL_KILL: {
             uint32_t target_pid = frame.cpu.general.ebx;
             int32_t *ret_ptr = (int32_t*) frame.cpu.general.ecx;
+            if (target_pid == 1) { if (ret_ptr != NULL) *ret_ptr = -1; break; }
             struct ProcessControlBlock *curr = process_get_current_running_pcb_pointer();
 
             bool is_clock = false;

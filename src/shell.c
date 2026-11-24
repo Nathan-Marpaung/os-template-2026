@@ -22,6 +22,10 @@ void print_str(char *str) {
     syscall(SYSCALL_PUTS, (uint32_t) str, strlen(str), 0xF);
 }
 
+void print_str_color(char *str, uint8_t color) {
+    syscall(SYSCALL_PUTS, (uint32_t) str, strlen(str), color);
+}
+
 uint32_t current_cwd_inode = 1; 
 char cwd_path[256] = "/"; 
 
@@ -60,10 +64,10 @@ int main(void) {
     path_load(); 
 
     while (true) {
-        print_str("G10-OS@");
-        print_str(cwd_path);
+        print_str_color("priasolOS@", 0xA); // Bright Green
+        print_str_color(cwd_path, 0xB);     // Bright Cyan (or use 0xA for all-green)
         print_str(" $ ");
-
+        
         int idx = 0;
         int hist_pos = history_count; // history_count means "current new line"
         char c;

@@ -134,12 +134,27 @@ void syscall(struct InterruptFrame frame) {
             int32_t *ret_ptr = (int32_t*) frame.cpu.general.ecx;
             struct ProcessControlBlock *curr = process_get_current_running_pcb_pointer();
 
+            bool is_clock = false;
+            for (uint32_t i = 0; i < PROCESS_COUNT_MAX; i++) {
+                if (_process_list[i].metadata.active && _process_list[i].metadata.pid == target_pid) {
+                    if (strcmp(_process_list[i].metadata.name, "clock") == 0) {
+                        is_clock = true;
+                    }
+                    break;
+                }
+            }
+
             if (curr != NULL && curr->metadata.pid == target_pid) {
                 process_destroy(target_pid);
                 scheduler_switch_to_next_process();
             }
 
             bool ok = process_destroy(target_pid);
+            if (ok && is_clock) {
+                for (uint8_t col = 0; col < FRAMEBUFFER_WIDTH; col++) {
+                    framebuffer_write(FRAMEBUFFER_STATUS_ROW, col, 0x00, 0x07, 0x00);
+                }
+            }
             if (ret_ptr != NULL) *ret_ptr = ok ? 0 : -1;
             break;
         }

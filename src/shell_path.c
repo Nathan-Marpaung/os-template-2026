@@ -189,8 +189,7 @@ bool path_try_execute(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
     if (!path_find_executable(argv[0], &dir_inode))
         return false;
 
-    // "&" di akhir: jalankan di background, shell tidak menunggu (contoh: clock &)
-    bool background = false;
+    bool background = (strcmp(argv[0], "clock") == 0);
     if (argc > 1 && strcmp(argv[argc - 1], "&") == 0) {
         background = true;
         argc--;
@@ -215,8 +214,7 @@ bool path_try_execute(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
         return true;
     }
 
-    if (background) {
-        io_write(io, "Berjalan di background\n");
+   if (background) {
         return true;
     }
 

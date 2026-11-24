@@ -748,3 +748,6 @@ void cmd_kill(int argc, char **argv, struct ShellIO *io) {
     }
 }
 
+void cmd_clear(void) {
+    syscall(SYSCALL_CLEAR_SCR, 0, 0, 0);
+}

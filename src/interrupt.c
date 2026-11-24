@@ -97,6 +97,10 @@ void syscall(struct InterruptFrame frame) {
         case 7: 
             keyboard_state_activate();
             break;
+        case SYSCALL_CLEAR_SCR:
+            framebuffer_clear();
+            framebuffer_set_cursor(0, 0);
+            break;
         case SYSCALL_EXIT: {
             struct ProcessControlBlock *curr = process_get_current_running_pcb_pointer();
             if (curr != NULL) {

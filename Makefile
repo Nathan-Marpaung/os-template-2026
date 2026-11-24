@@ -132,7 +132,7 @@ insert-clock: inserter user-clock
 	@echo Inserting clock into root directory...
 	@cd $(OUTPUT_FOLDER); ./inserter -f clock 1 $(DISK_NAME).bin
 
-insert-bin: inserter user-clock user-hello
+insert-bin: inserter user-clock user-hello user-rhythm
 	@echo Inserting programs into /bin...
 	@cd $(OUTPUT_FOLDER); ./inserter -d bin 1 $(DISK_NAME).bin
 	@cd $(OUTPUT_FOLDER); ./inserter -f clock /bin $(DISK_NAME).bin

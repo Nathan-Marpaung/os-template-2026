@@ -361,7 +361,55 @@ static void show_main_menu(bool play_boot_anim) {
     print_str(".\n\n");
 }
 
-/* ==================== TOUCH & OUTPUT REDIRECTION ==================== */
+/* ==================== TOUCH, REDIRECTION & CWD PATH ==================== */
+
+static void update_cwd_path(char *path_buf, const char *arg) {
+    if (arg == NULL || arg[0] == '\0') {
+        path_buf[0] = '/';
+        path_buf[1] = '\0';
+        return;
+    }
+
+    if (arg[0] == '/') {
+        path_buf[0] = '/';
+        path_buf[1] = '\0';
+    }
+
+    uint32_t i = 0;
+    while (arg[i] != '\0') {
+        while (arg[i] == '/') i++;
+        if (arg[i] == '\0') break;
+
+        uint32_t start = i;
+        while (arg[i] != '\0' && arg[i] != '/') i++;
+        uint32_t clen = i - start;
+
+        if (clen == 1 && arg[start] == '.') {
+            continue;
+        } else if (clen == 2 && arg[start] == '.' && arg[start + 1] == '.') {
+            int len = (int) strlen(path_buf);
+            if (len > 1) {
+                for (int k = len - 1; k >= 0; k--) {
+                    if (path_buf[k] == '/') {
+                        if (k == 0) path_buf[1] = '\0';
+                        else path_buf[k] = '\0';
+                        break;
+                    }
+                }
+            }
+        } else {
+            uint32_t cur_len = strlen(path_buf);
+            bool need_slash = !(cur_len == 1 && path_buf[0] == '/');
+            if (cur_len + (need_slash ? 1u : 0u) + clen < 255) {
+                if (need_slash) {
+                    path_buf[cur_len++] = '/';
+                }
+                memcpy(path_buf + cur_len, arg + start, clen);
+                path_buf[cur_len + clen] = '\0';
+            }
+        }
+    }
+}
 
 static void cmd_touch(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
     if (argc < 2) {
@@ -371,11 +419,20 @@ static void cmd_touch(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
         return;
     }
 
+    uint32_t parent = 0;
+    char fname[128];
+    if (!path_split_parent(cwd, argv[1], &parent, fname, sizeof(fname))) {
+        const char *err = "touch: Path tidak valid\n";
+        memcpy(io->output_buffer, err, strlen(err));
+        io->output_len = (int) strlen(err);
+        return;
+    }
+
     char empty_byte = 0;
     struct EXT2DriverRequest req = {
-        .parent_inode = cwd,
-        .name         = argv[1],
-        .name_len     = (uint8_t) strlen(argv[1]),
+        .parent_inode = parent,
+        .name         = fname,
+        .name_len     = (uint8_t) strlen(fname),
         .is_directory = false,
         .buffer_size  = 1,
         .buf          = &empty_byte
@@ -392,14 +449,21 @@ static void cmd_touch(int argc, char **argv, struct ShellIO *io, uint32_t cwd) {
 
 static void write_redirected_output(const char *filename, bool append,
                                     const char *data, int data_len, uint32_t cwd) {
+    uint32_t parent = 0;
+    char fname[128];
+    if (!path_split_parent(cwd, filename, &parent, fname, sizeof(fname))) {
+        print_str_color("shell: Path file tujuan tidak valid\n", 0x0C);
+        return;
+    }
+
     uint32_t total_len = 0;
     memset(redir_buf, 0, sizeof(redir_buf));
 
     if (append) {
         struct EXT2DriverRequest rreq = {
-            .parent_inode = cwd,
-            .name         = (char *) filename,
-            .name_len     = (uint8_t) strlen(filename),
+            .parent_inode = parent,
+            .name         = fname,
+            .name_len     = (uint8_t) strlen(fname),
             .buffer_size  = sizeof(redir_buf) - 1,
             .buf          = redir_buf
         };
@@ -418,9 +482,9 @@ static void write_redirected_output(const char *filename, bool append,
     }
 
     struct EXT2DriverRequest dreq = {
-        .parent_inode = cwd,
-        .name         = (char *) filename,
-        .name_len     = (uint8_t) strlen(filename),
+        .parent_inode = parent,
+        .name         = fname,
+        .name_len     = (uint8_t) strlen(fname),
         .is_directory = false,
         .buffer_size  = 0,
         .buf          = 0
@@ -430,9 +494,9 @@ static void write_redirected_output(const char *filename, bool append,
 
     uint32_t write_sz = (total_len > 0) ? total_len : 1;
     struct EXT2DriverRequest wreq = {
-        .parent_inode = cwd,
-        .name         = (char *) filename,
-        .name_len     = (uint8_t) strlen(filename),
+        .parent_inode = parent,
+        .name         = fname,
+        .name_len     = (uint8_t) strlen(fname),
         .is_directory = false,
         .buffer_size  = write_sz,
         .buf          = redir_buf
@@ -817,27 +881,9 @@ int main(void) {
             if (argc == 0) continue;
 
             if (strcmp(argv[0], "cd") == 0) {
-                uint32_t old_cwd = current_cwd_inode;
                 cmd_cd(argc, argv, &io, &current_cwd_inode);
-
-                if (argc < 2) {
-                    cwd_path[0] = '/'; cwd_path[1] = '\0';
-                } else if (old_cwd != current_cwd_inode) {
-                    if (strcmp(argv[1], "..") == 0) {
-                        int len = (int) strlen(cwd_path);
-                        if (len > 1) {
-                            for (int i = len - 1; i >= 0; i--) {
-                                if (cwd_path[i] == '/') {
-                                    if (i == 0) cwd_path[1] = '\0';
-                                    else cwd_path[i] = '\0';
-                                    break;
-                                }
-                            }
-                        }
-                    } else if (strcmp(argv[1], ".") != 0) {
-                        if (strcmp(cwd_path, "/") != 0) strcat(cwd_path, "/");
-                        strcat(cwd_path, argv[1]);
-                    }
+                if (io.output_len == 0) {
+                    update_cwd_path(cwd_path, (argc < 2) ? NULL : argv[1]);
                 }
             } else if (strcmp(argv[0], "exec") == 0) {
                 cmd_exec(argc, argv, &io, current_cwd_inode);

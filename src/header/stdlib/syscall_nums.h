@@ -16,9 +16,12 @@
 #define SYSCALL_EXEC        11
 #define SYSCALL_KILL        12
 #define SYSCALL_PS          13
-#define SYSCALL_GET_TIME    20
-#define SYSCALL_PUTS_AT     21
-
+#define SYSCALL_GET_TICKS   14
+#define SYSCALL_KB_FOCUS    15
+#define SYSCALL_KEY_MATRIX  16
+#define SYSCALL_SPEAKER     17
+#define SYSCALL_GET_TIME    20   // baru: ebx = pointer struct CMOSTime
+#define SYSCALL_PUTS_AT     21   // baru: ebx = string, ecx = panjang, edx = (row << 16) | (col << 8) | color
 #define SYSCALL_EXEC_ARGS     22
 #define SYSCALL_PROCESS_ALIVE 23
 #define SYSCALL_SHM_WRITE     24

@@ -15,6 +15,27 @@
 #include <stddef.h>
 #include <stdint.h>
 
+static volatile uint32_t system_ticks = 0;
+static uint32_t keyboard_focus_pid = 0;
+
+static void speaker_play(uint32_t freq) {
+    if (freq == 0) {
+        uint8_t tmp = in(0x61) & 0xFC;
+        out(0x61, tmp);
+        return;
+    }
+    if (freq < 20) freq = 20;
+    if (freq > 20000) freq = 20000;
+    uint32_t div = 1193180 / freq;
+    out(0x43, 0xB6);
+    out(0x42, (uint8_t) (div & 0xFF));
+    out(0x42, (uint8_t) ((div >> 8) & 0xFF));
+    uint8_t tmp = in(0x61);
+    if ((tmp & 3) != 3) {
+        out(0x61, tmp | 3);
+    }
+}
+
 void io_wait(void) {
     out(0x80, 0);
 }
@@ -80,7 +101,12 @@ void syscall(struct InterruptFrame frame) {
                 delete(*(struct EXT2DriverRequest*) frame.cpu.general.ebx);
             break;
         case 4:
-            get_keyboard_buffer((char*) frame.cpu.general.ebx);
+            struct ProcessControlBlock *curr = process_get_current_running_pcb_pointer();
+            if (keyboard_focus_pid != 0 && curr != NULL && curr->metadata.pid != keyboard_focus_pid) {
+                *((char*) frame.cpu.general.ebx) = 0;
+            } else {
+                get_keyboard_buffer((char*) frame.cpu.general.ebx);
+            }
             break;
         case 5: {
             char ch = (char) frame.cpu.general.ebx;
@@ -104,6 +130,11 @@ void syscall(struct InterruptFrame frame) {
         case SYSCALL_EXIT: {
             struct ProcessControlBlock *curr = process_get_current_running_pcb_pointer();
             if (curr != NULL) {
+                if (keyboard_focus_pid == curr->metadata.pid){
+                    keyboard_focus_pid = 0;
+                    speaker_play(0); 
+                    keyboard_clear_state();
+                } 
                 process_destroy(curr->metadata.pid);
             }
             scheduler_switch_to_next_process();
@@ -146,6 +177,11 @@ void syscall(struct InterruptFrame frame) {
             }
 
             if (curr != NULL && curr->metadata.pid == target_pid) {
+                if (keyboard_focus_pid == target_pid){
+                    keyboard_focus_pid = 0;
+                    speaker_play(0); 
+                    keyboard_clear_state();
+                } 
                 process_destroy(target_pid);
                 scheduler_switch_to_next_process();
             }
@@ -179,6 +215,49 @@ void syscall(struct InterruptFrame frame) {
             if (out_count != NULL) *out_count = count;
             break;
         }
+        case SYSCALL_GET_TICKS: {
+            uint32_t *out = (uint32_t*) frame.cpu.general.ebx;
+            if (out != NULL) *out = system_ticks;
+            break;
+        }
+        case SYSCALL_KB_FOCUS: {
+            struct ProcessControlBlock *curr = process_get_current_running_pcb_pointer();
+            uint32_t acquire = frame.cpu.general.ebx;
+            if (acquire) {
+                if (curr != NULL) {
+                    keyboard_focus_pid = curr->metadata.pid;
+                    keyboard_clear_state();
+                } 
+            } else {
+                if (curr == NULL || keyboard_focus_pid == curr->metadata.pid){
+                    keyboard_focus_pid = 0;
+                    keyboard_clear_state();
+                    speaker_play(0);
+                }
+    
+            }
+            break;
+        }
+
+        case SYSCALL_KEY_MATRIX: {
+            uint8_t *out_down    = (uint8_t*) frame.cpu.general.ebx;
+            uint8_t *out_pressed = (uint8_t*) frame.cpu.general.ecx;
+            struct ProcessControlBlock *curr = process_get_current_running_pcb_pointer();
+            if (keyboard_focus_pid != 0 && curr != NULL && curr->metadata.pid != keyboard_focus_pid) {
+                for (int i = 0; i < 128; i++) {
+                    if (out_down != NULL) out_down[i] = 0;
+                    if (out_pressed != NULL) out_pressed[i] = 0;
+                }
+            } else {
+                keyboard_get_matrix(out_down, out_pressed);
+            }
+            break;
+        }
+        case SYSCALL_SPEAKER: {
+            speaker_play(frame.cpu.general.ebx);
+            break;
+        }
+
         case SYSCALL_GET_TIME:
             if (frame.cpu.general.ebx < 0xC0000000)
                 cmos_read_time((struct CMOSTime*) frame.cpu.general.ebx);
@@ -218,6 +297,7 @@ void syscall(struct InterruptFrame frame) {
 void main_interrupt_handler(struct InterruptFrame frame) {
     switch (frame.int_number) {
         case PIC1_OFFSET + IRQ_TIMER: {
+            system_ticks++;
             if ((frame.int_stack.cs & 0x3) != 0x3) {
                 pic_ack(IRQ_TIMER);
                 break;

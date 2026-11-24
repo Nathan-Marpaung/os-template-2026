@@ -5,6 +5,10 @@
 #include "header/stdlib/shell_path.h"
 #include "header/stdlib/string.h" 
 
+#define KEY_ARROW_UP   ((char) 0x80)
+#define KEY_ARROW_DOWN ((char) 0x81)
+#define HISTORY_MAX    16
+
 // Wrapper Syscall
 void syscall(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx) {
     __asm__ volatile("mov %0, %%ebx" : /* <Empty> */ : "r"(ebx));
@@ -21,6 +25,35 @@ void print_str(char *str) {
 uint32_t current_cwd_inode = 1; 
 char cwd_path[256] = "/"; 
 
+static char history[HISTORY_MAX][256];
+static int history_count = 0;
+
+static void history_add(const char *cmd) {
+    // Skip duplicate consecutive commands
+    if (history_count > 0 && strcmp(history[(history_count - 1) % HISTORY_MAX], (char *) cmd) == 0) {
+        return;
+    }
+    int slot = history_count % HISTORY_MAX;
+    int len = strlen((char *) cmd);
+    if (len > 255) len = 255;
+    memcpy(history[slot], cmd, len);
+    history[slot][len] = '\0';
+    history_count++;
+}
+
+static void replace_input_line(char *input_buf, int *idx, const char *new_text) {
+    while (*idx > 0) {
+        (*idx)--;
+        print_str("\b \b");
+    }
+    int len = strlen((char *) new_text);
+    if (len > 255) len = 255;
+    memcpy(input_buf, new_text, len);
+    input_buf[len] = '\0';
+    *idx = len;
+    if (len > 0) print_str(input_buf);
+}
+
 int main(void) {
     char input_buf[256];
     syscall(SYSCALL_KEYBOARD, 0, 0, 0);
@@ -32,6 +65,7 @@ int main(void) {
         print_str(" $ ");
 
         int idx = 0;
+        int hist_pos = history_count; // history_count means "current new line"
         char c;
         while (true) {
             c = 0;
@@ -45,6 +79,20 @@ int main(void) {
                     idx--;
                     print_str("\b \b"); 
                 }
+            } else if (c == KEY_ARROW_UP) {
+                int oldest = (history_count > HISTORY_MAX) ? (history_count - HISTORY_MAX) : 0;
+                if (hist_pos > oldest) {
+                    hist_pos--;
+                    replace_input_line(input_buf, &idx, history[hist_pos % HISTORY_MAX]);
+                }
+            } else if (c == KEY_ARROW_DOWN) {
+                if (hist_pos < history_count - 1) {
+                    hist_pos++;
+                    replace_input_line(input_buf, &idx, history[hist_pos % HISTORY_MAX]);
+                } else if (hist_pos == history_count - 1) {
+                    hist_pos = history_count;
+                    replace_input_line(input_buf, &idx, "");
+                }
             } else if (c != 0 && idx < 255) { 
                 input_buf[idx++] = c;
                 char temp[2] = {c, '\0'};
@@ -53,6 +101,8 @@ int main(void) {
         }
 
         if (idx == 0) continue;
+
+        history_add(input_buf);
 
         struct ShellIO io = {0};
         io.output_len = 0;

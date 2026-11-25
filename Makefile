@@ -1,4 +1,4 @@
-.PHONY: run all build kernel iso disk clean user-shell inserter insert-hello user-hello insert-shell user-clock insert-clock user-args insert-args insert-all setup user-grow insert-grow
+.PHONY: run all build kernel iso disk clean user-shell inserter insert-hello user-hello insert-shell user-clock insert-clock user-args insert-args insert-all setup user-grow insert-grow insert-script
 
 # Target default: "make" tanpa argumen langsung build + jalankan OS
 .DEFAULT_GOAL := run
@@ -224,8 +224,14 @@ insert-grow: inserter user-grow
 	@echo Inserting grow into EXT2 filesystem...
 	@cd $(OUTPUT_FOLDER); ./inserter -f grow 1 storage.bin
 
+# Contoh script shell (bonus shell script): jalankan di shell dengan "sh demo.sh" atau "./demo.sh"
+insert-script: inserter
+	@cp $(SOURCE_FOLDER)/external/demo.sh $(OUTPUT_FOLDER)/demo.sh
+	@echo Inserting demo.sh into EXT2 filesystem...
+	@cd $(OUTPUT_FOLDER); ./inserter -f demo.sh 1 storage.bin
+
 # Masukkan semua user program (shell, hello, clock, args-demo, grow) ke storage.bin
-insert-all: insert-shell insert-hello insert-clock insert-args insert-grow insert-beep
+insert-all: insert-shell insert-hello insert-clock insert-args insert-grow insert-beep insert-script
 
 # Setup pertama kali: disk baru + semua program, lalu build kernel
 setup: clean disk insert-all build

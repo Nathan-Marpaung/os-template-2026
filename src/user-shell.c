@@ -47,6 +47,7 @@
 #endif
 
 #define SHELL_LINE_MAX     256
+#define SHELL_SCRIPT_MAX   4096 /* ukuran maksimum file .sh (byte) */
 #define SHELL_MAX_TOKENS   32
 #define SHELL_MAX_STAGES   8
 #define SHELL_MAX_DEPTH    32
@@ -1351,6 +1352,9 @@ static void cmd_grep(struct CmdCtx *ctx)
 /* Ctrl+C dikirim keyboard driver sebagai ASCII ETX (sama dengan KEYBOARD_CTRL_C di kernel) */
 #define SHELL_KEY_CTRL_C 0x03
 
+/* true jika exec foreground dihentikan Ctrl+C; dibaca oleh sh agar script ikut berhenti */
+static bool shell_exec_interrupted = false;
+
 /* Arti return code process_create_user_process() (PROCESS_CREATE_* di header/process/process.h) */
 static const char *process_create_error_text(int32_t retcode)
 {
@@ -1445,6 +1449,7 @@ static void cmd_exec(struct CmdCtx *ctx)
             syscall(SYSCALL_PROCESS_WAIT, proc_args.pid, (uintptr_t)&interrupted, 0);
             if (interrupted)
             {
+                shell_exec_interrupted = true;
                 ob_puts(ctx->out, "^C\n");
             }
         }
@@ -1643,6 +1648,133 @@ static void cmd_clear(struct CmdCtx *ctx)
     syscall(SYSCALL_CLEAR_SCREEN, 0, 0, 0);
 }
 
+/* ============================== sh (shell script) ============================== */
+
+static void execute_line(const char *line);
+
+static char script_buf[SHELL_SCRIPT_MAX + 1];
+static bool script_running = false;
+static char script_cmd_name[] = "sh";
+
+/* true jika nama berakhiran ".sh" (dan punya nama dasar) */
+static bool has_sh_suffix(const char *s)
+{
+    uint32_t n = 0;
+    while (s[n] != '\0')
+    {
+        n++;
+    }
+    return n > 3 && s[n - 3] == '.' && s[n - 2] == 's' && s[n - 1] == 'h';
+}
+
+/*
+ * sh <file.sh>: jalankan isi file sebagai script shell, satu command per baris.
+ * - baris kosong dan baris berawalan '#' dilewati
+ * - tiap baris lewat execute_line, jadi pipeline, redirect, exec, dan cd tetap berfungsi
+ * - error pada satu baris tidak menghentikan script
+ * - Ctrl+C saat exec foreground menghentikan seluruh script
+ * - script tidak boleh memanggil script lain (mencegah rekursi tanpa batas)
+ */
+static void cmd_sh(struct CmdCtx *ctx)
+{
+    if (ctx->argc != 2)
+    {
+        print_error("sh", NULL, "Penggunaan: sh <file.sh>");
+        return;
+    }
+    if (ctx->in != NULL || !ctx->to_screen)
+    {
+        print_error("sh", NULL, "sh tidak bisa dipakai di pipeline atau redirect");
+        return;
+    }
+    if (script_running)
+    {
+        print_error("sh", ctx->argv[1], "Script tidak boleh memanggil script lain");
+        return;
+    }
+
+    const char *path = ctx->argv[1];
+    if (path[0] == '.' && path[1] == '/')
+    {
+        path += 2;
+    }
+
+    uint32_t parent, name_len, size;
+    const char *name;
+    const char *err = resolve_parent(path, &parent, &name, &name_len);
+    if (err == NULL)
+    {
+        err = load_file(parent, name, name_len, &size);
+    }
+    if (err != NULL)
+    {
+        print_error("sh", ctx->argv[1], err);
+        return;
+    }
+    if (size > SHELL_SCRIPT_MAX)
+    {
+        print_error("sh", ctx->argv[1], "Script terlalu besar (maks 4096 byte)");
+        return;
+    }
+
+    /* Salin dari SHELL_FILE_BUF karena command di dalam script (cat, cp, dll) memakai buffer itu juga */
+    for (uint32_t i = 0; i < size; i++)
+    {
+        char c = (char)SHELL_FILE_BUF[i];
+        script_buf[i] = (c == '\t') ? ' ' : c;
+    }
+    script_buf[size] = '\0';
+
+    /* Mulai dari sini ctx->argv tidak boleh dipakai lagi: execute_line menimpa token_storage */
+    script_running = true;
+    shell_exec_interrupted = false;
+
+    uint32_t pos = 0;
+    while (pos < size && !shell_exec_interrupted)
+    {
+        char line[SHELL_LINE_MAX];
+        uint32_t len = 0;
+        bool too_long = false;
+
+        while (pos < size && script_buf[pos] != '\n')
+        {
+            char c = script_buf[pos++];
+            if (c == '\r')
+            {
+                continue;
+            }
+            if (len < SHELL_LINE_MAX - 1)
+            {
+                line[len++] = c;
+            }
+            else
+            {
+                too_long = true;
+            }
+        }
+        pos++; /* lewati '\n' */
+        line[len] = '\0';
+
+        uint32_t start = 0;
+        while (line[start] == ' ')
+        {
+            start++;
+        }
+        if (line[start] == '\0' || line[start] == '#')
+        {
+            continue;
+        }
+        if (too_long)
+        {
+            print_error("sh", NULL, "Ada baris lebih dari 255 karakter, dilewati");
+            continue;
+        }
+        execute_line(line + start);
+    }
+
+    script_running = false;
+}
+
 static void cmd_help(struct CmdCtx *ctx);
 
 struct Command
@@ -1663,6 +1795,7 @@ static const struct Command commands[] = {
     {"find", cmd_find, "find <nama>          cari file/folder di seluruh file system"},
     {"grep", cmd_grep, "grep <pola> [file]   cari baris yang cocok (regex: ^ $ . *)"},
     {"exec", cmd_exec, "exec <nama> [arg..] [&]  jalankan program (& = background, Ctrl+C = stop)"},
+    {"sh", cmd_sh, "sh <file.sh>         jalankan script shell (baris # = komentar)"},
     {"ps", cmd_ps, "ps                    tampilkan daftar process"},
     {"kill", cmd_kill, "kill <pid>            hentikan process"},
     {"echo", cmd_echo, "echo <teks>          tulis teks (echo isi > file untuk membuat file)"},
@@ -1918,6 +2051,16 @@ static void execute_line(const char *line)
         }
 
         const struct Command *command = find_command(ctx.argv[0]);
+        char *script_argv[2];
+        if (command == NULL && has_sh_suffix(ctx.argv[0]))
+        {
+            /* "nama.sh" atau "./nama.sh" sama dengan "sh nama.sh" */
+            script_argv[0] = script_cmd_name;
+            script_argv[1] = ctx.argv[0];
+            ctx.argv = script_argv;
+            ctx.argc = 2;
+            command = find_command("sh");
+        }
         if (command == NULL)
         {
             print_error(ctx.argv[0], NULL, "Command tidak ditemukan (ketik help)");

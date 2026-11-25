@@ -81,6 +81,7 @@ src/
 └── user-shell.c
 Makefile
 Readme.md
+IF2130 - Jurnal - 2026 uvuwevwe_OSas.pdf
 ```
 
 ## Cara Menjalankan Virtual Machine QEMU
@@ -146,3 +147,6 @@ make run     # atau cukup: make
 |---|---|
 | `Tab` | Melengkapi nama command (kata pertama atau setelah `\|`) dan nama file/folder, termasuk path seperti `cat folder/da<Tab>`. Jika ada beberapa kandidat, dilengkapi sampai bagian yang sama lalu semua kandidat ditampilkan |
 | `↑` / `↓` | Menelusuri riwayat command (maksimal 16 command terakhir, command berulang tidak disimpan dua kali). `↓` sampai paling bawah mengembalikan baris yang sedang diketik |
+
+## Link Jurnal
+https://docs.google.com/document/d/1bl7CNVy5vfpVLgzTN86kc9caABWwsXccOR462dNC_GM/edit?usp=sharing

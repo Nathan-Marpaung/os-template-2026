@@ -124,7 +124,7 @@ static void cmd_neofetch(void) {
     uint_to_str(pcount, proc_s);
 
     print_str("\n");
-    print_str_color("        .---.        ", 0x0E); print_str_color("robin", 0x0D); print_str("@"); print_str_color("priasolOS\n", 0x0B);
+    print_str_color("        .---.        ", 0x0E); print_str("@"); print_str_color("priasolOS\n", 0x0B);
     print_str_color("     ~=(  *  )=~     ", 0x0E); print_str_color("-------------------------\n", 0x08);
     print_str_color("   \\   /\\___/\\   /   ", 0x0D); print_str_color("OS      : ", 0x0B); print_str("priasolOS 2026 (x86 32-bit)\n");
     print_str_color("    \\=( ^ w ^ )=/    ", 0x0F); print_str_color("Kernel  : ", 0x0B); print_str("IF2130 Multitasking Kernel\n");
@@ -132,7 +132,7 @@ static void cmd_neofetch(void) {
     print_str_color("      /|  <3 |\\      ", 0x0D); print_str_color("Procs   : ", 0x0B); print_str(proc_s); print_str(" active\n");
     print_str_color("       /     \\       ", 0x0D); print_str_color("Shell   : ", 0x0B); print_str("priasol-sh (Pipe/Tab/Redir)\n");
     print_str_color("      ~~~~~~~~~      ", 0x03); print_str_color("FS      : ", 0x0B); print_str("EXT2 (512B blocks)\n");
-    print_str_color("   Penacony Harmony  ", 0x0E); print_str_color("Audio   : ", 0x0B); print_str("PC Speaker 8-bit Chiptune\n");
+    print_str_color("   Cat Robin (?)     ", 0x0E); print_str_color("Audio   : ", 0x0B); print_str("PC Speaker 8-bit Chiptune\n");
     print_str("                     ");
     print_str_color("###", 0x0C); print_str(" ");
     print_str_color("###", 0x0A); print_str(" ");
@@ -180,7 +180,7 @@ static void draw_menu_header(void) {
     puts_at(11, 28, "     / /| === |\\ \\     ", 0x0B);
     puts_at(12, 28, "        /     \\        ", 0x0D);
 
-    puts_at(13, 19, "\"Welcome to my world~\"", 0x0E);
+    puts_at(13, 28, "\"Welcome to my world~\"", 0x0E);
 }
 
 static void draw_menu_items(int selected) {
@@ -353,7 +353,6 @@ static void show_main_menu(bool play_boot_anim) {
 
     syscall(SYSCALL_CLEAR_SCR, 0, 0, 0);
     print_str_color("priasolOS 2026 ", 0x0B);
-    print_str_color("(Robin Edition)", 0x0D);
     print_str(" - Ketik ");
     print_str_color("menu", 0x0E);
     print_str(" untuk kembali ke Main Menu, atau ");

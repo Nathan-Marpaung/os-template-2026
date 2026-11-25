@@ -4,6 +4,7 @@
 #include "header/driver/keyboard.h"
 #include "header/driver/cmos.h"
 #include "header/process/scheduler.h"
+#include "header/process/pipe.h"
 #include "header/filesystem/ext2.h"
 #include "header/text/framebuffer.h"
 #include "header/syscall-number.h"
@@ -99,6 +100,16 @@ void main_interrupt_handler(struct InterruptFrame frame) {
     }
 }
 
+// True if [ptr, ptr + size) is entirely in user space (below the kernel higher half)
+static bool is_user_buffer(uint32_t ptr, uint32_t size) {
+    return ptr != 0 && ptr < KERNEL_VIRTUAL_ADDRESS_BASE && size <= KERNEL_VIRTUAL_ADDRESS_BASE - ptr;
+}
+
+static uint32_t current_pid(void) {
+    struct ProcessControlBlock *current = process_get_current_running_pcb_pointer();
+    return current != NULL ? current->metadata.pid : 0;
+}
+
 void syscall(struct InterruptFrame frame) {
     uint32_t ebx = frame.cpu.general.ebx;
     uint32_t ecx = frame.cpu.general.ecx;
@@ -175,6 +186,51 @@ void syscall(struct InterruptFrame frame) {
             *((uint32_t*) ebx) = current != NULL ? current->metadata.pid : 0;
             break;
         }
+        /* -- Bonus: separate shell commands (ELF) -- */
+        case SYSCALL_EXEC_ARGS: {
+            if (!is_user_buffer(ebx, sizeof(struct ExecRequest)) || !is_user_buffer(ecx, sizeof(int32_t)))
+                break;
+            struct ExecRequest request = *(struct ExecRequest*) ebx;
+            uint32_t pid = 0;
+            int32_t  ret = PROCESS_CREATE_FAIL_INVALID_ARGUMENT;
+            if (request.stdin_buf == NULL || is_user_buffer((uint32_t) request.stdin_buf, request.stdin_len))
+                ret = process_create_user_process_with_args(request.file, request.argc, request.argv,
+                                                            request.cwd_inode, &pid);
+            if (ret == PROCESS_CREATE_SUCCESS) {
+                // Still in the caller's address space, so stdin_buf can be copied now
+                if (request.stdin_buf != NULL)
+                    pipe_set_stdin(pid, request.stdin_buf, request.stdin_len);
+                if (request.capture_stdout)
+                    pipe_capture_stdout(pid);
+            }
+            *((int32_t*) ecx) = ret;
+            if (is_user_buffer(edx, sizeof(uint32_t)))
+                *((uint32_t*) edx) = pid;
+            break;
+        }
+        case SYSCALL_PROCESS_ALIVE:
+            if (is_user_buffer(ecx, sizeof(bool)))
+                *((bool*) ecx) = process_get_pcb_by_pid(ebx) != NULL;
+            break;
+        case SYSCALL_READ_STDIN:
+            if (is_user_buffer(edx, sizeof(int32_t)))
+                *((int32_t*) edx) = is_user_buffer(ebx, ecx)
+                                  ? pipe_read_stdin(current_pid(), (char*) ebx, ecx) : -1;
+            break;
+        case SYSCALL_WRITE_STDOUT:
+            if (is_user_buffer(ebx, ecx))
+                pipe_write_stdout(current_pid(), (const char*) ebx, ecx, (uint8_t) edx);
+            break;
+        case SYSCALL_READ_STDOUT:
+            if (is_user_buffer(ebx, ecx) && is_user_buffer(edx, sizeof(uint32_t)))
+                *((uint32_t*) edx) = pipe_read_stdout((char*) ebx, ecx);
+            break;
+        case SYSCALL_GET_CWD:
+            if (is_user_buffer(ebx, sizeof(uint32_t))) {
+                struct ProcessControlBlock *current = process_get_current_running_pcb_pointer();
+                *((uint32_t*) ebx) = current != NULL ? current->metadata.cwd_inode : 1;
+            }
+            break;
         default:
             break;
     }

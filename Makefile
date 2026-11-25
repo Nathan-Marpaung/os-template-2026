@@ -20,7 +20,7 @@ LFLAGS        = -T $(SOURCE_FOLDER)/linker.ld -melf_i386
 .PHONY: run all build clean kernel iso disk
 
 # 'disk' hanya membuat storage.bin jika belum ada (isi disk lama tidak ditimpa)
-run: all disk insert-shell insert-hello insert-clock insert-bin insert-commands insert-rhythm
+run: all disk insert-shell insert-hello insert-clock insert-bin insert-commands insert-rhythm insert-badapple
 	@qemu-system-i386 -s -rtc base=localtime \
 		-audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 \
 		-drive file=$(OUTPUT_FOLDER)/$(DISK_NAME).bin,format=raw,if=ide,index=0,media=disk \
@@ -132,12 +132,13 @@ insert-clock: inserter user-clock
 	@echo Inserting clock into root directory...
 	@cd $(OUTPUT_FOLDER); ./inserter -f clock 1 $(DISK_NAME).bin
 
-insert-bin: inserter user-clock user-hello user-rhythm
+insert-bin: inserter user-clock user-hello user-rhythm user-badapple
 	@echo Inserting programs into /bin...
 	@cd $(OUTPUT_FOLDER); ./inserter -d bin 1 $(DISK_NAME).bin
 	@cd $(OUTPUT_FOLDER); ./inserter -f clock /bin $(DISK_NAME).bin
 	@cd $(OUTPUT_FOLDER); ./inserter -f hello /bin $(DISK_NAME).bin
 	@cd $(OUTPUT_FOLDER); ./inserter -f rhythm /bin $(DISK_NAME).bin
+	@cd $(OUTPUT_FOLDER); ./inserter -f badapple /bin $(DISK_NAME).bin
 
 user-rhythm:
 	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
@@ -172,3 +173,27 @@ user-commands:
 insert-commands: inserter user-commands insert-bin
 	@echo Inserting separated shell commands into /bin...
 	@cd $(OUTPUT_FOLDER); for cmd in $(CMD_LIST); do ./inserter -f $$cmd /bin $(DISK_NAME).bin || exit 1; done
+
+user-badapple:
+	@$(ASM) $(AFLAGS) $(SOURCE_FOLDER)/crt0.s -o crt0.o
+	@$(CC)  $(CFLAGS) -fno-pie $(SOURCE_FOLDER)/badapple.c -o badapple.o
+	@$(LIN) -T $(SOURCE_FOLDER)/user-linker.ld -melf_i386 --oformat=binary \
+		crt0.o badapple.o -o $(OUTPUT_FOLDER)/badapple
+	@echo Linking badapple object files and generate flat binary...
+	@size --target=binary $(OUTPUT_FOLDER)/badapple
+	@rm -f *.o
+
+insert-badapple: inserter user-badapple
+	@echo Splitting badapple.dat into 32768-byte ext2 chunks and inserting into /badapple...
+	@rm -f $(OUTPUT_FOLDER)/ba*.dat
+	@dd if=$(SOURCE_FOLDER)/badapple.dat of=$(OUTPUT_FOLDER)/ba1.dat bs=32768 count=1 status=none
+	@dd if=$(SOURCE_FOLDER)/badapple.dat of=$(OUTPUT_FOLDER)/ba2.dat bs=32768 skip=1 count=1 status=none
+	@dd if=$(SOURCE_FOLDER)/badapple.dat of=$(OUTPUT_FOLDER)/ba3.dat bs=32768 skip=2 count=1 status=none
+	@dd if=$(SOURCE_FOLDER)/badapple.dat of=$(OUTPUT_FOLDER)/ba4.dat bs=32768 skip=3 count=1 status=none
+	@dd if=$(SOURCE_FOLDER)/badapple.dat of=$(OUTPUT_FOLDER)/ba5.dat bs=32768 skip=4 count=1 status=none
+	@cd $(OUTPUT_FOLDER) && ./inserter -d badapple 1 $(DISK_NAME).bin && \
+	for f in ba1.dat ba2.dat ba3.dat ba4.dat ba5.dat; do \
+		if [ -s $$f ]; then \
+			./inserter -f $$f /badapple $(DISK_NAME).bin || exit 1; \
+		fi; \
+	done

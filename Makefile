@@ -201,13 +201,9 @@ insert-commands: inserter user-commands insert-bin
 insert-badapple: inserter user-badapple
 	@echo Splitting badapple.dat into 32768-byte ext2 chunks and inserting into /badapple...
 	@rm -f $(OUTPUT_FOLDER)/ba*.dat
-	@dd if=$(APPS_FOLDER)/badapple.dat of=$(OUTPUT_FOLDER)/ba1.dat bs=32768 count=1 status=none
-	@dd if=$(APPS_FOLDER)/badapple.dat of=$(OUTPUT_FOLDER)/ba2.dat bs=32768 skip=1 count=1 status=none
-	@dd if=$(APPS_FOLDER)/badapple.dat of=$(OUTPUT_FOLDER)/ba3.dat bs=32768 skip=2 count=1 status=none
-	@dd if=$(APPS_FOLDER)/badapple.dat of=$(OUTPUT_FOLDER)/ba4.dat bs=32768 skip=3 count=1 status=none
-	@dd if=$(APPS_FOLDER)/badapple.dat of=$(OUTPUT_FOLDER)/ba5.dat bs=32768 skip=4 count=1 status=none
+	@split -b 32768 -d -a 2 --additional-suffix=.dat $(APPS_FOLDER)/badapple.dat $(OUTPUT_FOLDER)/ba
 	@cd $(OUTPUT_FOLDER) && ./inserter -d badapple 1 $(DISK_NAME).bin && \
-	for f in ba1.dat ba2.dat ba3.dat ba4.dat ba5.dat; do \
+	for f in ba*.dat; do \
 		if [ -s $$f ]; then \
 			./inserter -f $$f /badapple $(DISK_NAME).bin || exit 1; \
 		fi; \

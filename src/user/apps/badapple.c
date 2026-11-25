@@ -5,14 +5,15 @@
 
 #define SCREEN_COLS 80
 #define SCREEN_ROWS 24
-#define FRAME_TICKS 100 // 100 ms @ 1000 Hz PIT = exact 10 FPS
+#define FRAME_TICKS 50   // 50 ms @ 1000 Hz PIT = 20 FPS (lower to 40 if QEMU PIT still lags)
 #define CHUNK_BYTES 32768
-#define MAX_FRAMES  2400
+#define MAX_FRAMES  4500
 
 static uint8_t  chunk_buf[CHUNK_BYTES];
 static uint16_t freqs_buf[MAX_FRAMES];
 static uint8_t  dir_buf[512];
 static char     row_buf[SCREEN_COLS];
+static char     prev_screen[SCREEN_ROWS][SCREEN_COLS];
 
 static void syscall(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx) {
     __asm__ volatile("mov %0, %%ebx" : : "r"(ebx));
@@ -54,16 +55,14 @@ static uint32_t find_badapple_dir(void) {
 }
 
 static bool load_chunk(uint32_t dir_inode, int idx) {
-    const char *names[5] = { "ba1.dat", "ba2.dat", "ba3.dat", "ba4.dat", "ba5.dat" };
-    if (idx < 0 || idx >= 5) return false;
-    char fname[8];
-    for (int j = 0; j < 8; j++) fname[j] = names[idx][j];
+    if (idx < 0 || idx >= 20) return false;
+    char fname[9] = { 'b', 'a', '0' + (idx / 10), '0' + (idx % 10), '.', 'd', 'a', 't', '\0' };
 
     int32_t retcode = -1;
     struct EXT2DriverRequest req = {
         .buf          = chunk_buf,
         .name         = fname,
-        .name_len     = 7,
+        .name_len     = 8,
         .parent_inode = dir_inode,
         .buffer_size  = CHUNK_BYTES,
         .is_directory = false
@@ -85,7 +84,7 @@ int main(void) {
 
     uint32_t dir_inode = find_badapple_dir();
     if (dir_inode == 0 || !load_chunk(dir_inode, 0)) {
-        puts_at(0, 0, "Failed to read /badapple/ba1.dat", 32, 0x0C);
+        puts_at(0, 0, "Failed to read /badapple/ba00.dat", 33, 0x0C);
         syscall(SYSCALL_KB_FOCUS, 0, 0, 0);
         syscall(SYSCALL_EXIT, 1, 0, 0);
         return 1;
@@ -99,20 +98,25 @@ int main(void) {
         freqs_buf[i] = src_freqs[i];
     }
 
+    for (int r = 0; r < SCREEN_ROWS; r++) {
+        for (int c = 0; c < SCREEN_COLS; c++) {
+            prev_screen[r][c] = 0;
+        }
+    }
+
     int cur_chunk = 0;
     const uint8_t *rle = chunk_buf + 4 + (total_frames * 2);
     const uint8_t *end = chunk_buf + CHUNK_BYTES;
 
-    puts_at(24, 0, "Bad Apple!! [Q: Quit]", 21, 0x08);
+    puts_at(24, 0, "Bad Apple!! [Ctrl+C / Q: Quit]", 30, 0x08);
 
     uint16_t last_hz = 0;
+    uint32_t start_tick = get_ticks();
 
     for (uint32_t f = 0; f < total_frames; f++) {
-        uint32_t frame_start = get_ticks();
-
         char c = 0;
         syscall(SYSCALL_GETCHAR, (uint32_t)&c, 0, 0);
-        if (c == 'q' || c == 'Q' || c == 0x1B) {
+        if (c == 'q' || c == 'Q' || c == 0x1B || c == 0x03) {
             break;
         }
 
@@ -147,17 +151,27 @@ int main(void) {
                 run--;
 
                 if (col == SCREEN_COLS) {
-                    puts_at(row, 0, row_buf, SCREEN_COLS, 0x0F);
+                    bool dirty = false;
+                    for (int i = 0; i < SCREEN_COLS; i++) {
+                        if (prev_screen[row][i] != row_buf[i]) {
+                            prev_screen[row][i] = row_buf[i];
+                            dirty = true;
+                        }
+                    }
+                    if (dirty) {
+                        puts_at(row, 0, row_buf, SCREEN_COLS, 0x0F);
+                    }
                     col = 0;
                     row++;
                 }
             }
         }
 
-        while ((get_ticks() - frame_start) < FRAME_TICKS) {
+        uint32_t target_tick = start_tick + (f + 1) * FRAME_TICKS;
+        while ((int32_t)(target_tick - get_ticks()) > 0) {
             char k = 0;
             syscall(SYSCALL_GETCHAR, (uint32_t)&k, 0, 0);
-            if (k == 'q' || k == 'Q' || k == 0x1B) {
+            if (k == 'q' || k == 'Q' || k == 0x1B || k == 0x03) {
                 f = total_frames;
                 break;
             }

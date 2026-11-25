@@ -134,6 +134,7 @@ make run     # atau cukup: make
 | `exec args-demo satu dua` | Menjalankan program dengan argumen (argc/argv) |
 | `exec clock &` | Menjalankan jam di background, jam tampil di pojok kanan bawah dan shell tetap bisa dipakai |
 | `exec clock` lalu `Ctrl+C` | Program foreground ditunggu shell sampai selesai, `Ctrl+C` untuk menghentikannya |
+| `exec beep` | Menjalankan program yang memainkan suara do-re-mi-fa-so-la-si-do do-sol-mi-do |
 | `ps` | Menampilkan daftar process aktif (PID, nama, state) |
 | `kill <pid>` | Menghentikan process dengan PID tertentu (contoh: `kill 1`) |
 | `cd`, `ls`, `mkdir`, `cat`, `cp [-r]`, `rm [-r]`, `mv`, `find`, `grep` | Command file system, mendukung pipeline `\|` dan redirect `>` / `>>` |

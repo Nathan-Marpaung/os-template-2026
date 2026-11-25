@@ -56,7 +56,15 @@ CFLAGS        = $(DEBUG_CFLAG) $(WARNING_CFLAG) $(STRIP_CFLAG) $(ARCH_CFLAG) -c 
 AFLAGS        = -f elf32 -g -F dwarf
 LFLAGS        = -T $(SOURCE_FOLDER)/linker.ld -melf_i386
 
-QEMU_AUDIO ?= -audiodev coreaudio,id=snd0 -machine pcspk-audiodev=snd0
+ifeq ($(shell uname -s),Darwin)
+QEMU_AUDIO_DRIVER ?= coreaudio
+else
+QEMU_AUDIO_AVAILABLE := $(shell qemu-system-i386 -audiodev help 2>/dev/null)
+QEMU_AUDIO_DRIVER ?= $(firstword $(foreach d,pa pipewire alsa sdl,$(filter $(d),$(QEMU_AUDIO_AVAILABLE))))
+endif
+ifneq ($(strip $(QEMU_AUDIO_DRIVER)),)
+QEMU_AUDIO ?= -audiodev $(QEMU_AUDIO_DRIVER),id=snd0 -machine pcspk-audiodev=snd0
+endif
 
 run: all
 	@qemu-system-i386 \

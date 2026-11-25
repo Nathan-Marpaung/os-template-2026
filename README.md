@@ -18,10 +18,10 @@ Repository ini dibuat untuk memenuhi tugas besar mata kuliah IF2130 Sistem Opera
 
 | Nama | NIM | Bagian | Tanggung Jawab |
 |---|---|---|---|
-| Mulky Siraj Firizqi | 13525069 | A | 4.1.0, 4.1.1, 4.3.3 (memori virtual, CMOS, clock) |
-| Fritz | TODO | B | 4.1.2, 4.1.3, 4.1.4, 4.3.2 (PCB, process creation, process init, syscall kernel) |
-| Juan | TODO | C | 4.2.1, 4.2.2, 4.2.3 (timer, Round Robin, context switch) |
-| Gie | TODO | D | 4.3.1, 4.3.2 (shell), 4.3.4, 4.3.7 (crt0, exec/ps/kill, Hello World, README) |
+| Mulky Siraj Firizqi | 13525069 | A | 0.3, 2.6.2, 2.6.3, 3.4, 4.1.0, 4.1.1, 4.3.3 (memori virtual, CMOS, clock) |
+| Fritz | TODO | B | 0.1, 0.2, 2.4, 2.6.1.2, 3.2, 4.1.2, 4.1.3, 4.1.4, 4.3.2 (PCB, process creation, process init, syscall kernel) |
+| Juan | TODO | C | 1.1, 2.5, 2.6.1.1, 3.3, 4.2.1, 4.2.2, 4.2.3 (timer, Round Robin, context switch) |
+| Gie | TODO | D | 1.2, 1.3, 2.1, 2.2, 3.1, 4.3.1, 4.3.2 (shell), 4.3.4, 4.3.7 (crt0, exec/ps/kill, Hello World, README) |
 
 ## Struktur Direktori
 ```

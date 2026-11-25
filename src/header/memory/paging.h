@@ -8,8 +8,11 @@
  * Note: MB often referring to MiB in context of memory management
  * change this to be a small number to test if swap working properly
  * kernel will be tested with a small number of SYSTEM_MEMORY_MB
+ * Bisa juga di-override saat build tanpa mengubah file ini: make run SYSTEM_MEMORY_MB=6
  */
- #define SYSTEM_MEMORY_MB     128
+#ifndef SYSTEM_MEMORY_MB
+#define SYSTEM_MEMORY_MB     128
+#endif
 
 // Number of entries in a page directory
 #define PAGE_ENTRY_COUNT     1024
@@ -231,5 +234,13 @@ struct PageDirectory* paging_get_current_page_directory_addr(void);
 void paging_use_page_directory(struct PageDirectory *page_dir_virtual_addr);
 
 
+
+/**
+ * Page directory ke-index pada pool page directory proses (dipakai page replacement swap
+ * untuk memilih korban dari semua proses, bukan hanya proses yang sedang berjalan).
+ * @param index 0 .. PAGING_DIRECTORY_TABLE_MAX_COUNT - 1
+ * @return      Pointer page directory (virtual address kernel), NULL jika slot tidak terpakai
+ */
+struct PageDirectory *paging_get_page_directory_by_index(uint32_t index);
 
 #endif

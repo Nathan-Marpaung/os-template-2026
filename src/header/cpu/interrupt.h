@@ -170,6 +170,13 @@ void pic_remap(void);
  */
 void main_interrupt_handler(struct InterruptFrame frame);
 
+/**
+ * Hentikan proses yang sedang berjalan (dipakai syscall exit dan page fault akses tidak valid):
+ * lepaskan fokus keyboard / speaker jika dipegang proses itu, hancurkan proses, lalu pindah
+ * ke proses berikutnya. Tidak pernah kembali.
+ */
+__attribute__((noreturn)) void interrupt_terminate_current_process(void);
+
 extern struct TSSEntry _interrupt_tss_entry;
 
 /**

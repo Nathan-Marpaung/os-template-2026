@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="40" viewBox="0 0 900 40">
+<defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#8fb4f0" stop-opacity="0"/><stop offset=".5" stop-color="#9b87f5"/><stop offset="1" stop-color="#8fb4f0" stop-opacity="0"/></linearGradient></defs>
+<style>.n{font-family:'Segoe UI Symbol','Noto Sans Symbols',sans-serif;animation:b 2s ease-in-out infinite}@keyframes b{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(-6px);opacity:1}}</style>
+<path d="M0 20 Q 112 4 225 20 T 450 20 T 675 20 T 900 20" stroke="url(#g)" stroke-width="2" fill="none"><animate attributeName="d" values="M0 20 Q 112 4 225 20 T 450 20 T 675 20 T 900 20;M0 20 Q 112 36 225 20 T 450 20 T 675 20 T 900 20;M0 20 Q 112 4 225 20 T 450 20 T 675 20 T 900 20" dur="4s" repeatCount="indefinite"/></path>
+<text x="150" y="26" font-size="16" fill="#9b87f5" style="animation-delay:0.0s" class="n">♪</text><text x="330" y="26" font-size="16" fill="#9b87f5" style="animation-delay:0.4s" class="n">✦</text><text x="442" y="26" font-size="16" fill="#9b87f5" style="animation-delay:0.8s" class="n">♫</text><text x="560" y="26" font-size="16" fill="#9b87f5" style="animation-delay:1.2000000000000002s" class="n">✦</text><text x="740" y="26" font-size="16" fill="#9b87f5" style="animation-delay:1.6s" class="n">♪</text>
+</svg>

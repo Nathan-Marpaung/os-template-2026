@@ -2,6 +2,7 @@
 #define SHELL_CMD_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define MAX_IO_BUFFER 4096
 
@@ -10,6 +11,9 @@ struct ShellIO {
     char output_buffer[MAX_IO_BUFFER];
     int  output_len;
 };
+
+bool path_resolve(uint32_t cwd, const char *path, uint32_t *out_inode, bool *out_is_dir);
+bool path_split_parent(uint32_t cwd, const char *path, uint32_t *out_parent_inode, char *out_name, uint32_t name_cap);
 
 void cmd_cd(int argc, char **argv, struct ShellIO *io, uint32_t *cwd);
 void cmd_ls(int argc, char **argv, struct ShellIO *io, uint32_t cwd);

@@ -134,6 +134,7 @@ void syscall(struct InterruptFrame frame) {
                     keyboard_focus_pid = 0;
                     speaker_play(0); 
                     keyboard_clear_state();
+                    keyboard_set_scrollback(true);
                 } 
                 process_destroy(curr->metadata.pid);
             }
@@ -175,13 +176,15 @@ void syscall(struct InterruptFrame frame) {
                     break;
                 }
             }
+            
+            if (keyboard_focus_pid == target_pid) {
+                keyboard_focus_pid = 0;
+                speaker_play(0);
+                keyboard_clear_state();
+                keyboard_set_scrollback(true);
+            }
 
             if (curr != NULL && curr->metadata.pid == target_pid) {
-                if (keyboard_focus_pid == target_pid){
-                    keyboard_focus_pid = 0;
-                    speaker_play(0); 
-                    keyboard_clear_state();
-                } 
                 process_destroy(target_pid);
                 scheduler_switch_to_next_process();
             }
@@ -227,14 +230,15 @@ void syscall(struct InterruptFrame frame) {
                 if (curr != NULL) {
                     keyboard_focus_pid = curr->metadata.pid;
                     keyboard_clear_state();
-                } 
+                    keyboard_set_scrollback(false);
+                }
             } else {
-                if (curr == NULL || keyboard_focus_pid == curr->metadata.pid){
+                if (curr == NULL || keyboard_focus_pid == curr->metadata.pid) {
                     keyboard_focus_pid = 0;
                     keyboard_clear_state();
                     speaker_play(0);
+                    keyboard_set_scrollback(true);
                 }
-    
             }
             break;
         }

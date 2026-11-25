@@ -59,4 +59,7 @@ void puts(const char *buf, uint32_t count, uint32_t color);
  */
 void framebuffer_puts_at(uint8_t row, uint8_t col, const char *buf, uint32_t count, uint8_t color);
 
+void framebuffer_scroll_view(int32_t delta);
+void framebuffer_scroll_reset(void);
+
 #endif

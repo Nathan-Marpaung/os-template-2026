@@ -61,4 +61,6 @@ void keyboard_isr(void);
 void keyboard_get_matrix(uint8_t *out_down, uint8_t *out_pressed);
 void keyboard_clear_state(void);
 
+void keyboard_set_scrollback(bool enabled);
+
 #endif
